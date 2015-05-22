@@ -191,6 +191,15 @@ config SND_PROC_FS
           9KB on x86_64 platform.
           If unsure say Y.
 
+config SND_PARAMS_REFINEMENT
+        bool "HW/SW Params Refinement Support" if EXPERT
+        default y
+        help
+          Say 'N' to disable the HW/SW Params Refinement feature, which may
+	  save about 13KB code size on x86_64 object target.
+          Please be noted that enabling this may break alsa on the desktop,
+          only use it with tinyalsa/tinyplay for device such as IoT.
+
 config SND_VERBOSE_PROCFS
 	bool "Verbose procfs contents"
 	depends on SND_PROC_FS

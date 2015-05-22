@@ -19,6 +19,7 @@ snd-pcm-$(CONFIG_SND_DMA_SGBUF) += sgbuf.o
 snd-pcm-$(CONFIG_SND_PCM_ELD) += pcm_drm_eld.o
 snd-pcm-$(CONFIG_SND_PCM_IEC958) += pcm_iec958.o
 snd-pcm-$(CONFIG_SND_ASYNC_IO) += pcm_async.o
+snd-pcm-$(CONFIG_SND_PARAMS_REFINEMENT) += pcm_refine.o
 
 # for trace-points
 CFLAGS_pcm_lib.o := -I$(src)
