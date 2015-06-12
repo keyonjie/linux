@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
+#include <linux/module.h>
 #include <sound/core.h>
 #include <sound/compress_params.h>
 #include <sound/compress_driver.h>
@@ -703,3 +704,22 @@ compr_err:
 	kfree(compr);
 	return ret;
 }
+
+static int __init soc_compress_init(void)
+{
+       return 0;
+}
+module_init(soc_compress_init);
+
+static void __exit soc_compress_exit(void)
+{
+}
+module_exit(soc_compress_exit);
+
+/* Module information */
+MODULE_AUTHOR("Namarta Kohli <namartax.kohli@intel.com>");
+MODULE_AUTHOR("Ramesh Babu K V <ramesh.babu@linux.intel.com>");
+MODULE_AUTHOR("Vinod Koul <vinod.koul@linux.intel.com>");
+MODULE_DESCRIPTION("ALSA SoC Compress");
+MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:soc-compress");
