@@ -490,6 +490,15 @@ int soc_dai_hw_params(struct snd_pcm_substream *substream,
 		      struct snd_pcm_hw_params *params,
 		      struct snd_soc_dai *dai);
 
+/* soc pcm */
+int soc_pcm_open(struct snd_pcm_substream *substream);
+int soc_pcm_prepare(struct snd_pcm_substream *substream);
+int soc_pcm_close(struct snd_pcm_substream *substream);
+int soc_pcm_hw_free(struct snd_pcm_substream *substream);
+int soc_pcm_trigger(struct snd_pcm_substream *substream, int cmd);
+int soc_pcm_hw_params(struct snd_pcm_substream *substream,
+				struct snd_pcm_hw_params *params);
+
 /* Jack reporting */
 int snd_soc_card_jack_new(struct snd_soc_card *card, const char *id, int type,
 	struct snd_soc_jack *jack, struct snd_soc_jack_pin *pins,

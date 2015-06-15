@@ -152,6 +152,13 @@ int dpcm_be_dai_trigger(struct snd_soc_pcm_runtime *fe, int stream, int cmd);
 int dpcm_be_dai_prepare(struct snd_soc_pcm_runtime *fe, int stream);
 int dpcm_dapm_stream_event(struct snd_soc_pcm_runtime *fe, int dir,
 	int event);
+int dpcm_fe_dai_open(struct snd_pcm_substream *fe_substream);
+int dpcm_fe_dai_close(struct snd_pcm_substream *fe_substream);
+int dpcm_fe_dai_prepare(struct snd_pcm_substream *substream);
+int dpcm_fe_dai_trigger(struct snd_pcm_substream *substream, int cmd);
+int dpcm_fe_dai_hw_free(struct snd_pcm_substream *substream);
+int dpcm_fe_dai_hw_params(struct snd_pcm_substream *substream,
+				 struct snd_pcm_hw_params *params);
 
 static inline void dpcm_path_put(struct snd_soc_dapm_widget_list **list)
 {
