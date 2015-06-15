@@ -25,6 +25,19 @@ if SND_SOC
 config SND_SOC_AC97_BUS
 	bool
 
+config SND_SOC_DPCM
+	bool "Asoc DPCM support" if EXPERT
+	default y
+	---help---
+
+	  Warning! When unselected, DPCM won't be supported! So please unselect it
+	  only when your driver don't need DPCM support, that is, the items(.dynamic)
+	  of each snd_soc_dai_link are all 0s. Otherwise, the dpcm switch will fail
+	  and pcm stream can't work correctlly.
+
+	  For X86_64 platform, disable this may save about 10 KB memory footprint
+	  size.
+
 config SND_SOC_GENERIC_DMAENGINE_PCM
 	bool
 	select SND_DMAENGINE_PCM

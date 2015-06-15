@@ -106,6 +106,7 @@ struct snd_soc_dpcm_runtime {
 	int trigger_pending; /* trigger cmd + 1 if pending, 0 if not */
 };
 
+#ifdef CONFIG_SND_SOC_DPCM
 /* can this BE stop and free */
 int snd_soc_dpcm_can_be_free_stop(struct snd_soc_pcm_runtime *fe,
 		struct snd_soc_pcm_runtime *be, int stream);
@@ -159,6 +160,50 @@ int dpcm_fe_dai_trigger(struct snd_pcm_substream *substream, int cmd);
 int dpcm_fe_dai_hw_free(struct snd_pcm_substream *substream);
 int dpcm_fe_dai_hw_params(struct snd_pcm_substream *substream,
 				 struct snd_pcm_hw_params *params);
+#else
+static inline int snd_soc_dpcm_can_be_free_stop(struct snd_soc_pcm_runtime *fe,
+                struct snd_soc_pcm_runtime *be, int stream) { return 1; }
+static inline int snd_soc_dpcm_can_be_params(struct snd_soc_pcm_runtime *fe,
+                struct snd_soc_pcm_runtime *be, int stream) { return 1; }
+static inline int snd_soc_dpcm_fe_can_update(struct snd_soc_pcm_runtime *fe, int stream) { return 0; }
+static inline int snd_soc_dpcm_be_can_update(struct snd_soc_pcm_runtime *fe,
+                struct snd_soc_pcm_runtime *be, int stream) { return 0; }
+static inline struct snd_pcm_substream *
+        snd_soc_dpcm_get_substream(struct snd_soc_pcm_runtime *be, int stream)
+{
+	return NULL;
+}
+static inline enum snd_soc_dpcm_state
+        snd_soc_dpcm_be_get_state(struct snd_soc_pcm_runtime *be, int stream) {return 0; }
+static inline void snd_soc_dpcm_be_set_state(struct snd_soc_pcm_runtime *be, int stream,
+        enum snd_soc_dpcm_state state)  { }
+
+/* internal use only */
+static inline int soc_dpcm_be_digital_mute(struct snd_soc_pcm_runtime *fe, int mute) { return 0; }
+static inline int soc_dpcm_debugfs_add(struct snd_soc_pcm_runtime *rtd) { return 0; }
+static inline int soc_dpcm_runtime_update(struct snd_soc_card *card) { return 0; }
+static inline int dpcm_path_get(struct snd_soc_pcm_runtime *fe,
+        int stream, struct snd_soc_dapm_widget_list **list_) { return 0; }
+static inline int dpcm_process_paths(struct snd_soc_pcm_runtime *fe,
+        int stream, struct snd_soc_dapm_widget_list **list, int new) { return 0; }
+static inline int dpcm_be_dai_startup(struct snd_soc_pcm_runtime *fe, int stream) { return 0; }
+static inline int dpcm_be_dai_shutdown(struct snd_soc_pcm_runtime *fe, int stream){ return 0; }
+static inline void dpcm_be_disconnect(struct snd_soc_pcm_runtime *fe, int stream)  { }
+static inline void dpcm_clear_pending_state(struct snd_soc_pcm_runtime *fe, int stream)  { }
+static inline int dpcm_be_dai_hw_free(struct snd_soc_pcm_runtime *fe, int stream) { return 0; }
+static inline int dpcm_be_dai_hw_params(struct snd_soc_pcm_runtime *fe, int tream) { return 0; }
+static inline int dpcm_be_dai_trigger(struct snd_soc_pcm_runtime *fe, int stream, int cmd) { return 0; }
+static inline int dpcm_be_dai_prepare(struct snd_soc_pcm_runtime *fe, int stream) { return 0; }
+static inline int dpcm_dapm_stream_event(struct snd_soc_pcm_runtime *fe, int dir,
+        int event) { return 0; }
+static inline int dpcm_fe_dai_open(struct snd_pcm_substream *fe_substream) { return 0; }
+static inline int dpcm_fe_dai_prepare(struct snd_pcm_substream *substream) { return 0; }
+static inline int dpcm_fe_dai_trigger(struct snd_pcm_substream *substream, int cmd) { return 0; }
+static inline int dpcm_fe_dai_hw_free(struct snd_pcm_substream *substream) { return 0; }
+static inline int dpcm_fe_dai_close(struct snd_pcm_substream *fe_substream) { return 0; }
+static inline int dpcm_fe_dai_hw_params(struct snd_pcm_substream *substream,
+                                 struct snd_pcm_hw_params *params) { return 0; }
+#endif /* CONFIG_SND_SOC_DPCM */
 
 static inline void dpcm_path_put(struct snd_soc_dapm_widget_list **list)
 {
