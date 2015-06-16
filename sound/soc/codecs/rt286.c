@@ -329,6 +329,7 @@ int rt286_mic_detect(struct snd_soc_codec *codec, struct snd_soc_jack *jack)
 }
 EXPORT_SYMBOL_GPL(rt286_mic_detect);
 
+#ifdef CONFIG_SND_SOC_DAPM
 static int is_mclk_mode(struct snd_soc_dapm_widget *source,
 			 struct snd_soc_dapm_widget *sink)
 {
@@ -340,10 +341,12 @@ static int is_mclk_mode(struct snd_soc_dapm_widget *source,
 	else
 		return 0;
 }
+#endif
 
 static const DECLARE_TLV_DB_SCALE(out_vol_tlv, -6350, 50, 0);
 static const DECLARE_TLV_DB_SCALE(mic_vol_tlv, 0, 1000, 0);
 
+#ifdef CONFIG_SND_SOC_DAPM
 static const struct snd_kcontrol_new rt286_snd_controls[] = {
 	SOC_DOUBLE_R_TLV("DAC0 Playback Volume", RT286_DACL_GAIN,
 			    RT286_DACR_GAIN, 0, 0x7f, 0, out_vol_tlv),
@@ -356,6 +359,7 @@ static const struct snd_kcontrol_new rt286_snd_controls[] = {
 	SOC_DOUBLE_R("Speaker Playback Switch", RT286_SPOL_GAIN,
 			    RT286_SPOR_GAIN, RT286_MUTE_SFT, 1, 1),
 };
+#endif
 
 /* Digital Mixer */
 static const struct snd_kcontrol_new rt286_front_mix[] = {
@@ -429,6 +433,7 @@ static SOC_ENUM_SINGLE_DECL(rt286_spo_enum, RT286_SPK_MUX,
 static const struct snd_kcontrol_new rt286_spo_mux =
 SOC_DAPM_ENUM("SPO source", rt286_spo_enum);
 
+#ifdef CONFIG_SND_SOC_DAPM
 static int rt286_spk_event(struct snd_soc_dapm_widget *w,
 			    struct snd_kcontrol *kcontrol, int event)
 {
@@ -511,7 +516,6 @@ static int rt286_mic1_event(struct snd_soc_dapm_widget *w,
 			     struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
-
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		snd_soc_update_bits(codec,
@@ -685,6 +689,299 @@ static const struct snd_soc_dapm_route rt286_dapm_routes[] = {
 	{"HPO Pin", NULL, "HPO L"},
 	{"HPO Pin", NULL, "HPO R"},
 };
+#else
+static int rt286_spk_event(struct snd_soc_codec *codec, int event)
+{
+
+	switch (event) {
+	case SND_SOC_DAPM_POST_PMU:
+		snd_soc_write(codec,
+			RT286_SPK_EAPD, RT286_SET_EAPD_HIGH);
+		break;
+	case SND_SOC_DAPM_PRE_PMD:
+		snd_soc_write(codec,
+			RT286_SPK_EAPD, RT286_SET_EAPD_LOW);
+		break;
+
+	default:
+		return 0;
+	}
+
+	return 0;
+}
+
+static int rt286_set_dmic1_event(struct snd_soc_codec *codec, int event)
+{
+
+	switch (event) {
+	case SND_SOC_DAPM_POST_PMU:
+		snd_soc_write(codec, RT286_SET_PIN_DMIC1, 0x20);
+		break;
+	case SND_SOC_DAPM_PRE_PMD:
+		snd_soc_write(codec, RT286_SET_PIN_DMIC1, 0);
+		break;
+	default:
+		return 0;
+	}
+
+	return 0;
+}
+
+static int rt286_vref_event(struct snd_soc_codec *codec, int event)
+{
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		snd_soc_update_bits(codec,
+			RT286_CBJ_CTRL1, 0x0400, 0x0000);
+		mdelay(50);
+		break;
+	default:
+		return 0;
+	}
+
+	return 0;
+}
+
+static int rt286_ldo2_event(struct snd_soc_codec *codec, int event)
+{
+
+	switch (event) {
+	case SND_SOC_DAPM_POST_PMU:
+		snd_soc_update_bits(codec, RT286_POWER_CTRL2, 0x38, 0x08);
+		break;
+	case SND_SOC_DAPM_PRE_PMD:
+		snd_soc_update_bits(codec, RT286_POWER_CTRL2, 0x38, 0x30);
+		break;
+	default:
+		return 0;
+	}
+
+	return 0;
+}
+
+static int rt286_mic1_event(struct snd_soc_codec *codec, int event)
+{
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		snd_soc_update_bits(codec,
+			RT286_A_BIAS_CTRL3, 0xc000, 0x8000);
+		snd_soc_update_bits(codec,
+			RT286_A_BIAS_CTRL2, 0xc000, 0x8000);
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		snd_soc_update_bits(codec,
+			RT286_A_BIAS_CTRL3, 0xc000, 0x0000);
+		snd_soc_update_bits(codec,
+			RT286_A_BIAS_CTRL2, 0xc000, 0x0000);
+		break;
+	default:
+		return 0;
+	}
+
+	return 0;
+}
+
+static const char *event_type_enum[] = {
+        "PRE_PMU",
+        "POST_PMU",
+        "PRE_PMD",
+        "POST_PMD"
+};
+static SOC_ENUM_SINGLE_EXT_DECL(rt286_event_type_enum, event_type_enum);
+
+static int spk_event = 0;
+static int rt286_spk_event_put(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+        spk_event = ucontrol->value.integer.value[0];
+	rt286_spk_event(codec, 0x1 << spk_event);
+        return 0;
+}
+static int rt286_spk_event_get(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        ucontrol->value.integer.value[0] = spk_event;
+        return 0;
+}
+
+static int dmic1_event = 0;
+static int rt286_set_dmic1_event_put(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+        dmic1_event = ucontrol->value.integer.value[0];
+        rt286_set_dmic1_event(codec, 0x1 << dmic1_event);
+        return 0;
+}
+static int rt286_set_dmic1_event_get(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        ucontrol->value.integer.value[0] = dmic1_event;
+        return 0;
+}
+
+static int vref_event = 0;
+static int rt286_vref_event_put(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+        vref_event = ucontrol->value.integer.value[0];
+        rt286_vref_event(codec, 0x1 << vref_event);
+        return 0;
+}
+static int rt286_vref_event_get(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        ucontrol->value.integer.value[0] = vref_event;
+        return 0;
+}
+
+static int ldo2_event = 0;
+static int rt286_ldo2_event_put(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+        ldo2_event = ucontrol->value.integer.value[0];
+        rt286_ldo2_event(codec, 0x1 << ldo2_event);
+        return 0;
+}
+static int rt286_ldo2_event_get(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        ucontrol->value.integer.value[0] = ldo2_event;
+        return 0;
+}
+
+static int mic1_event = 0;
+static int rt286_mic1_event_put(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+        mic1_event = ucontrol->value.integer.value[0];
+        rt286_mic1_event(codec, 0x1 << mic1_event);
+        return 0;
+}
+static int rt286_mic1_event_get(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        ucontrol->value.integer.value[0] = mic1_event;
+        return 0;
+}
+
+static const char *bias_level_enum[] = {
+	"OFF",
+	"STANDBY",
+	"PREPARE",
+	"ON"
+};
+static SOC_ENUM_SINGLE_EXT_DECL(rt286_bias_level_enum, bias_level_enum);
+static int rt286_set_bias_level(struct snd_soc_codec *codec,
+                                 enum snd_soc_bias_level level);
+
+static int bias_level = 0;
+static int rt286_bias_level_put(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+        bias_level = ucontrol->value.integer.value[0];
+        rt286_set_bias_level(codec, bias_level);
+        return 0;
+}
+
+static int rt286_bias_level_get(struct snd_kcontrol *kcontrol,
+                            struct snd_ctl_elem_value *ucontrol)
+{
+        ucontrol->value.integer.value[0] = bias_level;
+        return 0;
+}
+
+
+static const struct snd_kcontrol_new rt286_snd_controls[] = {
+	SOC_DOUBLE_R_TLV("DAC0 Playback Volume", RT286_DACL_GAIN,
+			    RT286_DACR_GAIN, 0, 0x7f, 0, out_vol_tlv),
+	SOC_DOUBLE_R("ADC0 Capture Switch", RT286_ADCL_GAIN,
+				RT286_ADCR_GAIN, 7, 1, 1),
+	SOC_DOUBLE_R_TLV("ADC0 Capture Volume", RT286_ADCL_GAIN,
+			    RT286_ADCR_GAIN, 0, 0x7f, 0, out_vol_tlv),
+	SOC_SINGLE_TLV("AMIC Volume", RT286_MIC_GAIN,
+			    0, 0x3, 0, mic_vol_tlv),
+	SOC_DOUBLE_R("Speaker Playback Switch", RT286_SPOL_GAIN,
+			    RT286_SPOR_GAIN, RT286_MUTE_SFT, 1, 1),
+/* Digital Mixer  rt286_front_mix */
+	SOC_SINGLE("Front DAC Switch",  RT286_F_DAC_SWITCH,
+			RT286_MUTE_SFT, 1, 1),
+	SOC_SINGLE("Front RECMIX Switch", RT286_F_RECMIX_SWITCH,
+			RT286_MUTE_SFT, 1, 1),
+
+/* Analog Input Mixer rt286_rec_mix */
+	SOC_SINGLE("RECMIX Mic1 Switch", RT286_REC_MIC_SWITCH,
+			RT286_MUTE_SFT, 1, 1),
+	SOC_SINGLE("RECMIX I2S Switch", RT286_REC_I2S_SWITCH,
+			RT286_MUTE_SFT, 1, 1),
+	SOC_SINGLE("RECMIX Line1 Switch", RT286_REC_LINE_SWITCH,
+			RT286_MUTE_SFT, 1, 1),
+	SOC_SINGLE("RECMIX Beep Switch", RT286_REC_BEEP_SWITCH,
+			RT286_MUTE_SFT, 1, 1),
+
+/* spo_enable_control */
+	SOC_SINGLE("SPO Switch", RT286_SET_PIN_SPK,
+			RT286_SET_PIN_SFT, 1, 0),
+
+/* hpol_enable_control */
+	SOC_SINGLE("HPO L Switch", RT286_HPOL_GAIN,
+			RT286_MUTE_SFT, 1, 1),
+
+/* hpor_enable_control */
+	SOC_SINGLE("HPO R Switch", RT286_HPOR_GAIN,
+			RT286_MUTE_SFT, 1, 1),
+
+/* rt286_adc0_mux */
+	SOC_ENUM("ADC 0 Mux", rt286_adc0_enum),
+
+/* rt286_adc1_mux */
+	SOC_ENUM("ADC 1 Mux", rt286_adc1_enum),
+
+/* rt286_hpo_mux */
+	SOC_ENUM("HPO Mux", rt286_hpo_enum),
+
+/* rt286_spo_mux */
+	SOC_ENUM("SPK Mux", rt286_spo_enum),
+
+/* power related */
+	SOC_SINGLE("HV", RT286_POWER_CTRL1, 12, 1, 1),
+	SOC_SINGLE("VREF", RT286_POWER_CTRL1, 0, 1, 1),
+	SOC_SINGLE("LDO1", RT286_POWER_CTRL2, 2, 1, 0),
+	SOC_SINGLE("LDO2", RT286_POWER_CTRL1, 13, 1, 1),
+	SOC_SINGLE("MCLK MODE", RT286_PLL_CTRL1, 5, 1, 0),
+	SOC_SINGLE("DMIC1 power", RT286_SET_POWER(RT286_DMIC1), 0, 1, 1),
+	SOC_SINGLE("DMIC2 power", RT286_SET_POWER(RT286_DMIC2), 0, 1, 1),
+	SOC_SINGLE("ADC 0 Mux power", RT286_SET_POWER(RT286_ADC_IN1), 0, 1, 1),
+	SOC_SINGLE("ADC 1 Mux power", RT286_SET_POWER(RT286_ADC_IN2), 0, 1, 1),
+	SOC_SINGLE("HP power", RT286_SET_PIN_HPO, RT286_SET_PIN_SFT, 1, 0),
+	SOC_SINGLE("Front power",  RT286_SET_POWER(RT286_DAC_OUT1), 0, 1, 1),
+	SOC_SINGLE("Surround power",  RT286_SET_POWER(RT286_DAC_OUT2), 0, 1, 1),
+
+/* events*/
+	//SOC_SINGLE_EXT("spk event", 0, 0, 1, 1,
+	//		rt286_spk_event_get, rt286_spk_event_put),
+	SOC_ENUM_EXT("spk event", rt286_event_type_enum,
+			 rt286_spk_event_get, rt286_spk_event_put),
+	SOC_ENUM_EXT("dmic1 event", rt286_event_type_enum,
+			rt286_set_dmic1_event_get, rt286_set_dmic1_event_put),
+	SOC_ENUM_EXT("vref event", rt286_event_type_enum,
+			rt286_vref_event_get, rt286_vref_event_put),
+	SOC_ENUM_EXT("ldo2 event", rt286_event_type_enum,
+			rt286_ldo2_event_get, rt286_ldo2_event_put),
+	SOC_ENUM_EXT("mic1 event", rt286_event_type_enum,
+			rt286_mic1_event_get, rt286_mic1_event_put),
+/* bias level */
+	SOC_ENUM_EXT("bias level", rt286_bias_level_enum,
+			rt286_bias_level_get, rt286_bias_level_put),
+};
+#endif
 
 static int rt286_hw_params(struct snd_pcm_substream *substream,
 			    struct snd_pcm_hw_params *params,
@@ -928,6 +1225,9 @@ static int rt286_set_bias_level(struct snd_soc_codec *codec,
 		break;
 	}
 
+#ifndef CONFIG_SND_SOC_DAPM
+	codec->component.dapm.bias_level = level;
+#endif
 	return 0;
 }
 
@@ -1075,10 +1375,12 @@ static struct snd_soc_codec_driver soc_codec_dev_rt286 = {
 	.idle_bias_off = true,
 	.controls = rt286_snd_controls,
 	.num_controls = ARRAY_SIZE(rt286_snd_controls),
+#ifdef CONFIG_SND_SOC_DAPM
 	.dapm_widgets = rt286_dapm_widgets,
 	.num_dapm_widgets = ARRAY_SIZE(rt286_dapm_widgets),
 	.dapm_routes = rt286_dapm_routes,
 	.num_dapm_routes = ARRAY_SIZE(rt286_dapm_routes),
+#endif
 };
 
 static const struct regmap_config rt286_regmap = {
