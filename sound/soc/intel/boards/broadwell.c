@@ -145,7 +145,13 @@ static int broadwell_rtd_init(struct snd_soc_pcm_runtime *rtd)
 		return ret;
 	}
 
+#ifdef CONFIG_SND_SOC_DPCM
 	return 0;
+#else
+	ret = broadwell_rt286_codec_init(rtd);
+	return ret;
+#endif
+
 }
 
 /* broadwell digital audio interface glue - connects codec <--> CPU */
@@ -156,35 +162,53 @@ static struct snd_soc_dai_link broadwell_rt286_dais[] = {
 		.stream_name = "System Playback/Capture",
 		.cpu_dai_name = "System Pin",
 		.platform_name = "haswell-pcm-audio",
+#ifdef CONFIG_SND_SOC_DPCM
 		.dynamic = 1,
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai",
+#else
+		.codec_name = "i2c-INT343A:00",
+		.codec_dai_name = "rt286-aif1",
+		.ops = &broadwell_rt286_ops,
+		.be_hw_params_fixup = broadwell_ssp0_fixup,
+#endif
+
 		.init = broadwell_rtd_init,
+#ifdef CONFIG_SND_SOC_DPCM
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST, SND_SOC_DPCM_TRIGGER_POST},
 		.dpcm_playback = 1,
 		.dpcm_capture = 1,
+#endif
 	},
 	{
 		.name = "Offload0",
 		.stream_name = "Offload0 Playback",
 		.cpu_dai_name = "Offload0 Pin",
 		.platform_name = "haswell-pcm-audio",
+#ifdef CONFIG_SND_SOC_DPCM
 		.dynamic = 1,
+#endif
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai",
+#ifdef CONFIG_SND_SOC_DPCM
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST, SND_SOC_DPCM_TRIGGER_POST},
 		.dpcm_playback = 1,
+#endif
 	},
 	{
 		.name = "Offload1",
 		.stream_name = "Offload1 Playback",
 		.cpu_dai_name = "Offload1 Pin",
 		.platform_name = "haswell-pcm-audio",
+#ifdef CONFIG_SND_SOC_DPCM
 		.dynamic = 1,
+#endif
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai",
+#ifdef CONFIG_SND_SOC_DPCM
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST, SND_SOC_DPCM_TRIGGER_POST},
 		.dpcm_playback = 1,
+#endif
 	},
 	{
 		.name = "Loopback PCM",
@@ -197,6 +221,7 @@ static struct snd_soc_dai_link broadwell_rt286_dais[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST, SND_SOC_DPCM_TRIGGER_POST},
 		.dpcm_capture = 1,
 	},
+#ifdef CONFIG_SND_SOC_DPCM
 	/* Back End DAI links */
 	{
 		/* SSP0 - Codec */
@@ -217,6 +242,7 @@ static struct snd_soc_dai_link broadwell_rt286_dais[] = {
 		.dpcm_playback = 1,
 		.dpcm_capture = 1,
 	},
+#endif
 };
 
 static int broadwell_suspend(struct snd_soc_card *card){
