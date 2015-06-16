@@ -355,6 +355,7 @@ struct regulator;
 struct snd_soc_dapm_widget_list;
 struct snd_soc_dapm_update;
 
+#ifdef CONFIG_SND_SOC_DAPM
 int dapm_regulator_event(struct snd_soc_dapm_widget *w,
 			 struct snd_kcontrol *kcontrol, int event);
 int dapm_clock_event(struct snd_soc_dapm_widget *w,
@@ -450,6 +451,110 @@ int snd_soc_dapm_dai_get_connected_widgets(struct snd_soc_dai *dai, int stream,
 
 struct snd_soc_dapm_context *snd_soc_dapm_kcontrol_dapm(
 	struct snd_kcontrol *kcontrol);
+#else
+static inline int dapm_regulator_event(struct snd_soc_dapm_widget *w,
+                         struct snd_kcontrol *kcontrol, int event) { return 0; }
+static inline int dapm_clock_event(struct snd_soc_dapm_widget *w,
+                         struct snd_kcontrol *kcontrol, int event) { return 0; }
+
+/* dapm controls */
+static inline int snd_soc_dapm_put_volsw(struct snd_kcontrol *kcontrol,
+        struct snd_ctl_elem_value *ucontrol) { return 0; }
+static inline int snd_soc_dapm_get_volsw(struct snd_kcontrol *kcontrol,
+        struct snd_ctl_elem_value *ucontrol) { return 0; }
+static inline int snd_soc_dapm_get_enum_double(struct snd_kcontrol *kcontrol,
+        struct snd_ctl_elem_value *ucontrol) { return 0; }
+static inline int snd_soc_dapm_put_enum_double(struct snd_kcontrol *kcontrol,
+        struct snd_ctl_elem_value *ucontrol) { return 0; }
+static inline int snd_soc_dapm_info_pin_switch(struct snd_kcontrol *kcontrol,
+        struct snd_ctl_elem_info *uinfo) { return 0; }
+static inline int snd_soc_dapm_get_pin_switch(struct snd_kcontrol *kcontrol,
+        struct snd_ctl_elem_value *uncontrol) { return 0; }
+static inline int snd_soc_dapm_put_pin_switch(struct snd_kcontrol *kcontrol,
+        struct snd_ctl_elem_value *uncontrol) { return 0; }
+static inline int snd_soc_dapm_new_controls(struct snd_soc_dapm_context *dapm,
+        const struct snd_soc_dapm_widget *widget,
+        int num) { return 0; }
+static inline int snd_soc_dapm_new_dai_widgets(struct snd_soc_dapm_context *dapm,
+                                 struct snd_soc_dai *dai) { return 0; }
+static inline int snd_soc_dapm_link_dai_widgets(struct snd_soc_card *card) { return 0; }
+static inline void snd_soc_dapm_connect_dai_link_widgets(struct snd_soc_card *card) { }
+static inline int snd_soc_dapm_new_pcm(struct snd_soc_card *card,
+                         const struct snd_soc_pcm_stream *params,
+			     unsigned int num_params,
+                         struct snd_soc_dapm_widget *source,
+                         struct snd_soc_dapm_widget *sink) { return 0; }
+
+/* dapm path setup */
+static inline int snd_soc_dapm_new_widgets(struct snd_soc_card *card) { return 0; }
+static inline void snd_soc_dapm_free(struct snd_soc_dapm_context *dapm) { }
+static inline int snd_soc_dapm_add_routes(struct snd_soc_dapm_context *dapm,
+                            const struct snd_soc_dapm_route *route, int num) { return 0; }
+static inline int snd_soc_dapm_del_routes(struct snd_soc_dapm_context *dapm,
+                            const struct snd_soc_dapm_route *route, int num) { return 0; }
+static inline int snd_soc_dapm_weak_routes(struct snd_soc_dapm_context *dapm,
+                             const struct snd_soc_dapm_route *route, int num) { return 0; }
+
+/* dapm events */
+static inline void snd_soc_dapm_stream_event(struct snd_soc_pcm_runtime *rtd, int stream,
+        int event) { }
+static inline void snd_soc_dapm_shutdown(struct snd_soc_card *card) { }
+
+/* external DAPM widget events */
+static inline int snd_soc_dapm_mixer_update_power(struct snd_soc_dapm_context *dapm,
+                struct snd_kcontrol *kcontrol, int connect,
+                struct snd_soc_dapm_update *update) { return 0; }
+static inline int snd_soc_dapm_mux_update_power(struct snd_soc_dapm_context *dapm,
+                struct snd_kcontrol *kcontrol, int mux, struct soc_enum *e,
+                struct snd_soc_dapm_update *update) { return 0; }
+
+/* dapm sys fs - used by the core */
+static inline int snd_soc_dapm_sys_add(struct device *dev) { return 0; }
+static inline void snd_soc_dapm_debugfs_init(struct snd_soc_dapm_context *dapm,
+                                struct dentry *parent) { }
+
+/* dapm audio pin control and status */
+static inline int snd_soc_dapm_enable_pin(struct snd_soc_dapm_context *dapm,
+                            const char *pin) { return 0; }
+static inline int snd_soc_dapm_enable_pin_unlocked(struct snd_soc_dapm_context *dapm,
+                                     const char *pin) { return 0; }
+static inline int snd_soc_dapm_disable_pin(struct snd_soc_dapm_context *dapm,
+                             const char *pin) { return 0; }
+static inline int snd_soc_dapm_disable_pin_unlocked(struct snd_soc_dapm_context *dapm,
+                                      const char *pin) { return 0; }
+static inline int snd_soc_dapm_nc_pin(struct snd_soc_dapm_context *dapm, const char *pin) { return 0; }
+static inline int snd_soc_dapm_nc_pin_unlocked(struct snd_soc_dapm_context *dapm,
+                                 const char *pin) { return 0; }
+/*return not_connected status*/
+static inline int snd_soc_dapm_get_pin_status(struct snd_soc_dapm_context *dapm,
+                                const char *pin) { return 0; }
+static inline int snd_soc_dapm_sync(struct snd_soc_dapm_context *dapm) { return 0; }
+static inline int snd_soc_dapm_sync_unlocked(struct snd_soc_dapm_context *dapm) { return 0; }
+static inline int snd_soc_dapm_force_enable_pin(struct snd_soc_dapm_context *dapm,
+                                  const char *pin) { return 0; }
+static inline int snd_soc_dapm_force_enable_pin_unlocked(struct snd_soc_dapm_context *dapm,
+                                           const char *pin) { return 0; }
+static inline int snd_soc_dapm_ignore_suspend(struct snd_soc_dapm_context *dapm,
+                                const char *pin) { return 0; }
+static inline void snd_soc_dapm_auto_nc_pins(struct snd_soc_card *card) { }
+static inline unsigned int dapm_kcontrol_get_value(const struct snd_kcontrol *kcontrol) { return 0; }
+
+/* Mostly internal - should not normally be used */
+static inline void dapm_mark_endpoints_dirty(struct snd_soc_card *card) { }
+
+/* dapm path query */
+static inline int snd_soc_dapm_dai_get_connected_widgets(struct snd_soc_dai *dai, int stream,
+        struct snd_soc_dapm_widget_list **list) { return 0; }
+
+static inline struct snd_soc_dapm_context *snd_soc_dapm_kcontrol_dapm(
+        struct snd_kcontrol *kcontrol) { return NULL; }
+
+static inline struct snd_soc_dapm_widget *snd_soc_dapm_new_control(struct snd_soc_dapm_context *dapm,
+	const struct snd_soc_dapm_widget *widget) {return NULL;}
+static inline struct snd_soc_dapm_widget *snd_soc_dapm_new_control_unlocked(struct snd_soc_dapm_context *dapm,
+			 const struct snd_soc_dapm_widget *widget) {return NULL;}
+
+#endif
 
 int snd_soc_dapm_force_bias_level(struct snd_soc_dapm_context *dapm,
 	enum snd_soc_bias_level level);

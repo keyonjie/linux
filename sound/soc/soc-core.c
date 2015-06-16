@@ -200,10 +200,12 @@ static umode_t soc_dev_attr_is_visible(struct kobject *kobj,
 	return rtd->codec ? attr->mode : 0; /* enabled only with codec */
 }
 
+#ifdef CONFIG_SND_SOC_DAPM
 static const struct attribute_group soc_dapm_dev_group = {
 	.attrs = soc_dapm_dev_attrs,
 	.is_visible = soc_dev_attr_is_visible,
 };
+#endif
 
 static const struct attribute_group soc_dev_roup = {
 	.attrs = soc_dev_attrs,
@@ -211,7 +213,9 @@ static const struct attribute_group soc_dev_roup = {
 };
 
 static const struct attribute_group *soc_dev_attr_groups[] = {
+#ifdef CONFIG_SND_SOC_DAPM
 	&soc_dapm_dev_group,
+#endif
 	&soc_dev_roup,
 	NULL
 };

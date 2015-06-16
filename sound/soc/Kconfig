@@ -28,6 +28,7 @@ config SND_SOC_AC97_BUS
 config SND_SOC_DPCM
 	bool "Asoc DPCM support" if EXPERT
 	default y
+	select SND_SOC_DAPM
 	---help---
 
 	  Warning! When unselected, DPCM won't be supported! So please unselect it
@@ -36,6 +37,18 @@ config SND_SOC_DPCM
 	  and pcm stream can't work correctlly.
 
 	  For X86_64 platform, disable this may save about 10 KB memory footprint
+	  size.
+
+config SND_SOC_DAPM
+        bool "Asoc DAPM support" if EXPERT && !SND_SOC_DPCM
+        default y
+	---help---
+
+	  Set to N to disable DAPM, to save memory footprint for small(unexpensive)
+	  devices, please be noted that you may need change dapm widgets and routes
+	  to normal kcontrols in codec if DAPM is disabled.
+
+	  For X86_64 platform, disabling this may save about 26 KB memory footprint
 	  size.
 
 config SND_SOC_GENERIC_DMAENGINE_PCM
