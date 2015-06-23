@@ -240,4 +240,11 @@ config SND_DMA_SGBUF
 	def_bool y
 	depends on X86
 
+config SND_ASYNC_IO
+	bool "async io support"
+	default y
+	help
+	  Say N to diable async io, it may save code size about 2KB.
+	  If unsure, say Y.
+
 source "sound/core/seq/Kconfig"

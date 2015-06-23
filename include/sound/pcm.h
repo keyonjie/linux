@@ -1075,10 +1075,47 @@ snd_pcm_sframes_t snd_pcm_lib_write(struct snd_pcm_substream *substream,
 				    snd_pcm_uframes_t frames);
 snd_pcm_sframes_t snd_pcm_lib_read(struct snd_pcm_substream *substream,
 				   void __user *buf, snd_pcm_uframes_t frames);
+typedef int (*transfer_f)(struct snd_pcm_substream *substream, unsigned int hwoff,
+                          unsigned long data, unsigned int off,
+                          snd_pcm_uframes_t size);
+snd_pcm_sframes_t snd_pcm_lib_read1(struct snd_pcm_substream *substream,
+                                           unsigned long data,
+                                           snd_pcm_uframes_t size,
+                                           int nonblock,
+                                           transfer_f transfer);
+snd_pcm_sframes_t snd_pcm_lib_write1(struct snd_pcm_substream *substream,
+                                            unsigned long data,
+                                            snd_pcm_uframes_t size,
+                                            int nonblock,
+                                            transfer_f transfer);
+int pcm_sanity_check(struct snd_pcm_substream *substream);
+#ifdef CONFIG_SND_ASYNC_IO
 snd_pcm_sframes_t snd_pcm_lib_writev(struct snd_pcm_substream *substream,
 				     void __user **bufs, snd_pcm_uframes_t frames);
 snd_pcm_sframes_t snd_pcm_lib_readv(struct snd_pcm_substream *substream,
 				    void __user **bufs, snd_pcm_uframes_t frames);
+ssize_t snd_pcm_writev(struct kiocb *iocb, struct iov_iter *from);
+ssize_t snd_pcm_readv(struct kiocb *iocb, struct iov_iter *to);
+#else
+static inline snd_pcm_sframes_t snd_pcm_lib_writev(struct snd_pcm_substream *substream,
+                                     void __user **bufs, snd_pcm_uframes_t frames)
+{
+        return 0;
+}
+static inline snd_pcm_sframes_t snd_pcm_lib_readv(struct snd_pcm_substream *substream,
+                                    void __user **bufs, snd_pcm_uframes_t frames)
+{
+        return 0;
+}
+static inline ssize_t snd_pcm_writev(struct kiocb *iocb, struct iov_iter *from)
+{
+        return 0;
+}
+static inline ssize_t snd_pcm_readv(struct kiocb *iocb, struct iov_iter *to)
+{
+        return 0;
+}
+#endif
 
 extern const struct snd_pcm_hw_constraint_list snd_pcm_known_rates;
 
