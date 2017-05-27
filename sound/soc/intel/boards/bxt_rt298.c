@@ -349,6 +349,7 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 		.dynamic = 1,
 		.ops = &broxton_dmic_ops,
 	},
+#if 0
 	[BXT_DPCM_AUDIO_HDMI1_PB] =
 	{
 		.name = "Bxt HDMI Port1",
@@ -388,6 +389,7 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 		.nonatomic = 1,
 		.dynamic = 1,
 	},
+#endif
 	/* Back End DAI links */
 	{
 		/* SSP5 - Codec */
@@ -396,6 +398,10 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 		.cpu_dai_name = "SSP5 Pin",
 		.platform_name = "0000:00:0e.0",
 		.no_pcm = 1,
+#if 1
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai",
+#else
 		.codec_name = "i2c-INT343A:00",
 		.codec_dai_name = "rt298-aif1",
 		.init = broxton_rt298_codec_init,
@@ -404,9 +410,11 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 		.ignore_pmdown_time = 1,
 		.be_hw_params_fixup = broxton_ssp5_fixup,
 		.ops = &broxton_rt298_ops,
+#endif
 		.dpcm_playback = 1,
 		.dpcm_capture = 1,
 	},
+#if 0
 	{
 		.name = "dmic01",
 		.id = 1,
@@ -452,6 +460,7 @@ static struct snd_soc_dai_link broxton_rt298_dais[] = {
 		.dpcm_playback = 1,
 		.no_pcm = 1,
 	},
+#endif
 };
 
 #define NAME_SIZE	32
