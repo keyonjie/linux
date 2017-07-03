@@ -274,18 +274,26 @@ static void apl_dump(struct snd_sof_dev *sdev, u32 flags)
 	int i;
 
 	if (flags & SOF_DBG_REGS) {
+		dev_dbg(sdev->dev, "dumping hda registers... sdev->bar[%d]; 0x%8.8x\n",
+			APL_HDA_BAR, sdev->bar[APL_HDA_BAR]);
 		for (i = 0; i < 0x120; i += 4 ) {
 			dev_dbg(sdev->dev, "hda 0x%2.2x value 0x%8.8x\n",
 				i, snd_sof_dsp_read(sdev, APL_HDA_BAR, i));
 		}
+		dev_dbg(sdev->dev, "dumping spib registers... sdev->bar[%d]; 0x%8.8x\n",
+			APL_SPIB_BAR, sdev->bar[APL_SPIB_BAR]);
 		for (i = 0; i < 0xc; i += 4 ) {
 			dev_dbg(sdev->dev, "spib 0x%2.2x value 0x%8.8x\n",
 				i, snd_sof_dsp_read(sdev, APL_SPIB_BAR, i));
 		}
+		dev_dbg(sdev->dev, "dumping dsp registers... sdev->bar[%d]; 0x%8.8x\n",
+			APL_DSP_BAR, sdev->bar[APL_DSP_BAR]);
 		for (i = 0; i < 0x40; i += 4 ) {
 			dev_dbg(sdev->dev, "dsp 0x%2.2x value 0x%8.8x\n",
 				i, snd_sof_dsp_read(sdev, APL_DSP_BAR, i));
 		}
+		dev_dbg(sdev->dev, "dumping pp registers... sdev->bar[%d]; 0x%8.8x\n",
+			APL_PP_BAR, sdev->bar[APL_PP_BAR]);
 		for (i = 0; i < 0x40; i += 4 ) {
 			dev_dbg(sdev->dev, "pp 0x%2.2x value 0x%8.8x\n",
 				i, snd_sof_dsp_read(sdev, APL_PP_BAR, i));
