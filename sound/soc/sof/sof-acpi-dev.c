@@ -317,11 +317,13 @@ static struct snd_sof_machine baytrail_machines[] = {
 	{ "10EC5640", "byt-rt5640", "intel/reef-byt.ri",
 		"intel/reef-byt-rt5640.tplg", "baytrail-pcm-audio",
 		&snd_sof_byt_ops, },
+#if 0
 	{ "10EC5651", "bytcr_rt5651", "intel/reef-byt.ri",
 		"intel/reef-byt-rt5651.tplg", "sst-mfld-platform",
 		&snd_sof_byt_ops, mfld_new_mach_data, is_byt_cr},
-	{ "10EC5651", "byt-rt5651", "intel/reef-byt.ri",
-		"intel/reef-byt-rt5651.tplg", "baytrail-pcm-audio",
+#endif
+	{ "10EC5651",  "sof-nocodec", "intel/reef-byt.ri",
+		"intel/reef-byt-nocodec.tplg", NULL,
 		&snd_sof_byt_ops, },
 	{ "193C9890", "byt-max98090", "intel/reef-byt.ri",
 		"intel/reef-byt.tplg", "baytrail-pcm-audio",
