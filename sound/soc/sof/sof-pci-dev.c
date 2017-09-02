@@ -229,10 +229,11 @@ static void sof_pci_remove(struct pci_dev *pci)
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_APOLLOLAKE)
 static const struct snd_sof_machine sof_bxt_machines[] = {
-	{ "INT343A", "bxt_alc298s_i2s", "intel/reef-bxt.ri",
-		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_sof_apl_ops },
-	{ "DLGS7219", "bxt_da7219_max98357a_i2s", "intel/reef-bxt.ri",
-		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_sof_apl_ops },
+	{ "INT343A", "sof-nocodec", "intel/reef-apl.ri",
+		"intel/reef-apl-nocodec.tplg", "0000:00:0e.0",
+		&snd_sof_apl_ops },
+	{ "DLGS7219", "bxt_da7219_max98357a_i2s", "intel/reef-apl.ri",
+		"intel/reef-apl.tplg", "0000:00:0e.0", &snd_sof_apl_ops },
 };
 
 static const struct sof_dev_desc bxt_desc = {
@@ -242,8 +243,8 @@ static const struct sof_dev_desc bxt_desc = {
 	.resindex_imr_base	= -1,
 	.irqindex_host_ipc	= -1,
 	.resindex_dma_base	= -1,
-	.nocodec_fw_filename = "intel/reef-bxt.ri",
-	.nocodec_tplg_filename = "intel/reef-bxt.tplg"
+	.nocodec_fw_filename = "intel/reef-apl.ri",
+	.nocodec_tplg_filename = "intel/reef-apl-nocodec.tplg"
 };
 #endif
 

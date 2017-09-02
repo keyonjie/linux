@@ -100,6 +100,7 @@ static int sof_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct snd_sof_pcm *spcm = rtd->sof;
 	struct sof_ipc_pcm_params pcm;
 	struct sof_ipc_pcm_params_reply ipc_params_reply;
+	const struct snd_sof_dsp_ops *ops = sdev->ops;
 	int ret;
 
 	/* nothing todo for BE */
@@ -183,6 +184,13 @@ static int sof_pcm_hw_params(struct snd_pcm_substream *substream,
 	/* copy offset */
 	//spcm->posn_offset[substream->stream] = ipc_params_reply.posn_offset;
 
+	/* firmware already configured host stream */
+	if (ops && ops->host_stream_prepare) {
+		pcm.params.stream_tag =
+			ops->host_stream_prepare(sdev, substream, params);
+		dev_dbg(sdev->dev, "stream_tag %d", pcm.params.stream_tag);
+	}
+
 	return ret;
 }
 
@@ -219,7 +227,8 @@ static int sof_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		snd_soc_platform_get_drvdata(rtd->platform);
 	struct snd_sof_pcm *spcm = rtd->sof;
 	struct sof_ipc_stream stream;
-
+	const struct snd_sof_dsp_ops *ops = sdev->ops;
+	int ret = 0;
 
 	/* nothing todo for BE */
 	if (rtd->dai_link->no_pcm)
@@ -253,8 +262,13 @@ static int sof_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	}
 
 	/* send IPC to the DSP */
- 	return sof_ipc_tx_message_nowait(sdev->ipc, stream.hdr.cmd, &stream,
-		sizeof(stream));
+	ret = sof_ipc_tx_message_wait(sdev->ipc,
+		stream.hdr.cmd, &stream, sizeof(stream), NULL, 0);
+
+	if (ops && ops->host_stream_trigger)
+		ret = ops->host_stream_trigger(sdev, substream, cmd);
+
+	return ret;
 }
 
 static snd_pcm_uframes_t sof_pcm_pointer(struct snd_pcm_substream *substream)
@@ -308,6 +322,7 @@ static int sof_pcm_open(struct snd_pcm_substream *substream)
 	struct snd_sof_pcm *spcm = rtd->sof;
 	struct snd_soc_tplg_stream_caps *caps = 
 		&spcm->pcm.caps[substream->stream];
+	const struct snd_sof_dsp_ops *ops = sdev->ops;
 
 	/* nothing todo for BE */
 	if (rtd->dai_link->no_pcm)
@@ -355,6 +370,10 @@ static int sof_pcm_open(struct snd_pcm_substream *substream)
 
 	spcm->posn_valid[substream->stream] = false;
 	spcm->substream = substream;
+
+	if (ops && ops->host_stream_open)
+		ops->host_stream_open(sdev, substream);
+
 	mutex_unlock(&spcm->mutex);
 	return 0;
 }
