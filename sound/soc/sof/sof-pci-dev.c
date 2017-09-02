@@ -230,9 +230,9 @@ static void sof_pci_remove(struct pci_dev *pci)
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_APOLLOLAKE)
 static const struct snd_sof_machine sof_bxt_machines[] = {
 	{ "INT343A", "bxt_alc298s_i2s", "intel/reef-bxt.ri",
-		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_sof_bxt_ops },
+		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_sof_apl_ops },
 	{ "DLGS7219", "bxt_da7219_max98357a_i2s", "intel/reef-bxt.ri",
-		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_sof_bxt_ops },
+		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_sof_apl_ops },
 };
 
 static const struct sof_dev_desc bxt_desc = {
