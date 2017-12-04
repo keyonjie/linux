@@ -1,14 +1,6 @@
 /*
- * Copyright (c) 2017, Intel Corporation.
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
- * more details.
+ * SPDX-License-Identifier: GPL-2.0
+ * Copyright (C) 2018 Intel Corporation
  */
 
 #include <linux/module.h>
@@ -19,64 +11,71 @@
 #include "ishtp-dev.h"
 #include "client.h"
 
-#define ISH_TTY_MAJOR		267
-
 /* Rx ring buffer pool size */
 #define TTY_CL_RX_RING_SIZE	32
 #define TTY_CL_TX_RING_SIZE	16
 
-#define UART_GET_CONFIG	1
-#define UART_SET_CONFIG 2
-#define UART_SEND_DATA	3
-#define UART_RECV_DATA	4
-#define UART_ABORT_WRITE 5
-#define UART_ABORT_READ 6
-
-#define CMD_MASK	0x7F
-#define IS_RESPONSE	0x80
-
-struct ishtp_tty_msg {
-	uint8_t command; /* Bit 7 : is_response */
-	uint8_t status;
-	uint16_t size;
-} __packed;
-
-struct uart_config {
-	uint32_t baud;
-	uint8_t bits_length:4;
-	uint8_t stop_bits:2;
-	uint8_t parity:1;
-	uint8_t even_parity:1;
-	uint8_t flow_control:1;
-	uint8_t reserved:7;
+enum ish_uart_command{
+	UART_GET_CONFIG = 1,
+	UART_SET_CONFIG,
+	UART_SEND_DATA,
+	UART_RECV_DATA,
+	UART_ABORT_WRITE,
+	UART_ABORT_READ,
 };
 
-struct ishtp_cl_tty{
+#define CMD_MASK	GENMASK(6,0)
+#define IS_RESPONSE	BIT(7)
+
+struct ishtp_tty_msg {
+	u8 command; /* Bit 7 : is_response */
+	u8 status;
+	u16 size;
+};
+
+struct uart_config {
+	u32 baud;
+	u8 bits_length:4;
+	u8 stop_bits:2;
+	u8 parity:1;
+	u8 even_parity:1;
+	u8 flow_control:1;
+	u8 reserved:7;
+};
+
+struct ishtp_cl_tty {
 	struct tty_port port;
 	struct ishtp_cl_device *cl_device;
 	struct ishtp_cl *ishtp_cl;
-	uint32_t baud;
-	uint8_t bits_length;
+	u32 baud;
+	u8 bits_length;
 	int max_msg_size;
 	bool get_report_done;
 	int last_cmd_status;
 	wait_queue_head_t ishtp_tty_wait;
 };
 
+#define cl_tty_dev(tp) &tp->ishtp_cl->device->dev
 static struct ishtp_cl_tty *ishtp_cl_tty_device;
 
-static const uuid_le tty_ishtp_guid = UUID_LE(0x6f2647c7, 0x3e16, 0x4d79,
-					      0xb4, 0xff, 0x02, 0x89, 0x28,
-					      0xee, 0xeb, 0xca);
+static const guid_t tty_ishtp_guid = GUID_INIT(0x6f2647c7, 0x3e16, 0x4d79,
+					       0xb4, 0xff, 0x02, 0x89, 0x28,
+					       0xee, 0xeb, 0xca);
 
 static int ishtp_wait_for_response(struct ishtp_cl_tty *tp)
 {
-	if (!tp->get_report_done)
-		wait_event_interruptible_timeout(tp->ishtp_tty_wait,
-						 tp->get_report_done, 3 * HZ);
+	if (tp->get_report_done)
+		return 0;
+
+	/*
+	 * ISH firmware max delay for one time sending failure is 1Hz,
+	 * and firmware will retry 2 times, so 3Hz is used for timeout.
+	 */
+	wait_event_interruptible_timeout(tp->ishtp_tty_wait,
+					 tp->get_report_done, 3 * HZ);
 
 	if (!tp->get_report_done) {
-		pr_err("Timeout waiting for response from ISHTP device\n");
+		dev_err(cl_tty_dev(tp), "Timeout waiting for response from ISHTP device\n");
 		return -ETIMEDOUT;
 	}
 
@@ -111,10 +110,10 @@ static int ish_tty_write(struct tty_struct *tty, const unsigned char *buf,
 	unsigned char *ishtp_buf;
 	struct ishtp_tty_msg *ishtp_msg;
 	unsigned char *msg_buf;
-	uint32_t max_msg_payload_size;
+	u32 max_msg_payload_size;
 	int c, ret = 0;
 
-	dev_dbg(tty->dev, "%s: len=%d\n", __func__, count);
+	dev_dbg(tty->dev, "write_req: len=%d\n", count);
 
 	ishtp_buf = kzalloc(sizeof(struct ishtp_tty_msg) + tp->max_msg_size,
 			    GFP_KERNEL);
@@ -171,8 +170,6 @@ static void ish_tty_set_termios(struct tty_struct *tty,
 	struct ktermios *termios;
 	struct uart_config *cfg;
 	unsigned int baud;
-
-	dev_dbg(tty->dev, "[%d]%s index:%d\n", __LINE__, __func__, tty->index);
 
 	if (old_termios && !tty_termios_hw_change(&tty->termios, old_termios))
 		return;
@@ -251,15 +248,13 @@ static void process_recv(struct ishtp_cl_device *cl_device, void *recv_buf,
 	unsigned char	*payload;
 	size_t payload_len, total_len, cur_pos;
 
-	dev_dbg(&cl_device->dev, "%s():+++ len=%u\n", __func__,
-		(unsigned)data_len);
+	dev_dbg(&cl_device->dev, "ishtp receive ():+++ len=%zu\n", data_len);
 
 	if (data_len < sizeof(struct ishtp_tty_msg)) {
 		dev_err(&cl_device->dev,
-			"Error, received %u which is ",
-			(unsigned)data_len);
-		dev_err(&cl_device->dev, " less than data header %u\n",
-			(unsigned)sizeof(struct ishtp_tty_msg));
+			"Error, received %zu which is ", data_len);
+		dev_err(&cl_device->dev, " less than data header %lu\n",
+			sizeof(struct ishtp_tty_msg));
 		return;
 	}
 
@@ -324,9 +319,8 @@ static void process_recv(struct ishtp_cl_device *cl_device, void *recv_buf,
 			dev_dbg(&cl_device->dev,
 				"Command: recv data: len=%ld\n",
 				payload_len);
-			print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_NONE,
-				       16, 1, payload,
-				       payload_len, true);
+			print_hex_dump_bytes("", DUMP_PREFIX_NONE, payload,
+					     payload_len);
 			tty_insert_flip_string(&tp->port, payload,
 					       payload_len);
 			tty_flip_buffer_push(&tp->port);
@@ -381,10 +375,9 @@ static int ishtp_cl_tty_connect(struct ishtp_cl_tty *tty_dev,
 	}
 
 	ret = ishtp_cl_link(cl, ISHTP_HOST_CLIENT_ID_ANY);
-	if (ret) {
-		ret = -ENOMEM;
+	if (ret)
 		goto out_client_free;
-	}
+
 
 	fw_client = ishtp_fw_cl_get_client(cl->dev, &tty_ishtp_guid);
 	if (!fw_client) {
@@ -453,7 +446,7 @@ static int ishtp_cl_tty_init(struct ishtp_cl_device *cl_device)
 	ish_tty_driver->driver_name = "ish-serial";
 	ish_tty_driver->name = "ttyISH";
 	ish_tty_driver->minor_start = 0;
-	ish_tty_driver->major = ISH_TTY_MAJOR;
+	ish_tty_driver->major = 0;
 	ish_tty_driver->type = TTY_DRIVER_TYPE_SERIAL;
 	ish_tty_driver->subtype = SERIAL_TYPE_NORMAL;
 	ish_tty_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV;
@@ -551,16 +544,16 @@ static int __init ishtp_tty_client_init(void)
 {
 	return ishtp_cl_driver_register(&ishtp_cl_tty_driver);
 }
+module_init(ishtp_tty_client_init);
 
 static void __exit ishtp_tty_client_exit(void)
 {
 	ishtp_cl_driver_unregister(&ishtp_cl_tty_driver);
 }
-
-late_initcall(ishtp_tty_client_init);
 module_exit(ishtp_tty_client_exit);
 
 MODULE_DESCRIPTION("ISH ISHTP TTY client driver");
 MODULE_AUTHOR("Even Xu <even.xu@intel.com>");
-MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Srinivas Pandruvada <srinivas.pandruvada@linux.intel.com>");
+MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("ishtp:*");
