@@ -2742,6 +2742,12 @@ static int hub_port_wait_reset(struct usb_hub *hub, int port1,
 	if (!udev)
 		return 0;
 
+	if (hub_is_superspeedplus(hub->hdev))
+		udev->lanes = ((ext_portstatus &
+				USB_EXT_PORT_STAT_RX_LANES) >> 8) + 1;
+	else
+		udev->lanes = 1;
+
 	if (hub_is_wusb(hub))
 		udev->speed = USB_SPEED_WIRELESS;
 	else if (hub_is_superspeedplus(hub->hdev) &&
