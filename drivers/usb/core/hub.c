@@ -4592,9 +4592,11 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 			if (udev->speed >= USB_SPEED_SUPER) {
 				devnum = udev->devnum;
 				dev_info(&udev->dev,
-						"%s SuperSpeed%s USB device number %d using %s\n",
+						"%s SuperSpeed%s Gen %dx%d USB device number %d using %s\n",
 						(udev->config) ? "reset" : "new",
 					 (udev->speed == USB_SPEED_SUPER_PLUS) ? "Plus" : "",
+					 (udev->speed == USB_SPEED_SUPER_PLUS) ? 2 : 1,
+					 udev->lanes,
 					 devnum, driver_name);
 			}
 
