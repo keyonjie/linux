@@ -285,7 +285,7 @@ static int tdf8532_stop_play(struct tdf8532_priv *tdf8532)
 
 	ret = tdf8532_wait_state(tdf8532, STATE_STBY, ACK_TIMEOUT);
 	if (ret < 0)
-		goto out;
+		;//goto out;
 
 	ret = tdf8532_amp_write(tdf8532, SET_CLK_STATE, CLK_DISCONNECT);
 	if (ret < 0)
@@ -298,6 +298,7 @@ static int tdf8532_stop_play(struct tdf8532_priv *tdf8532)
 	ret = tdf8532_wait_state(tdf8532, STATE_IDLE, ACK_TIMEOUT);
 
 out:
+	ret = 0;
 	return ret;
 }
 
@@ -343,7 +344,49 @@ static int tdf8532_mute(struct snd_soc_dai *dai, int mute)
 						CHNL_MASK(CHNL_MAX));
 }
 
+static int tdf8532_hw_params(struct snd_pcm_substream *substream,
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai)
+{
+	struct snd_soc_codec *codec = dai->codec;
+	struct tdf8532_priv *dev_data = snd_soc_codec_get_drvdata(codec);
+	u8 payload[16];
+	int ret;
+
+		/* set format */
+		payload[0] = 0x02;
+		payload[1] = 0x00;
+		payload[2] = 0x08;
+		payload[3] = 0x80;/* ModuleId */
+		payload[4] = 0x1c;/* CmdId, SetAudioConfig_cmd */
+		payload[5] = 0;/* rfa */
+		payload[6] = 0x01;/* SamplingFrequency, 48KHz */
+		payload[7] = 0x00;/* FrameSize, 2 slots per I2S frame */
+		payload[8] = 0x00;/* SlotSize, 16bit */
+		/* TDMFrameSync, TDM frame starts at rising edge frame sync */
+		payload[9] = 0x1;
+		payload[10] = 0x0;/* BitClockDelay, no delay */
+		ret = i2c_master_send(dev_data->i2c, payload, 11);
+
+		/* set routing */
+		payload[0] = 0x02;
+		payload[1] = 0x00;
+		payload[2] = 0x06;
+		payload[3] = 0x80;/* ModuleId */
+		payload[4] = 0x28;/* CmdId, SetAudioRoutingConfig_cmd */
+		/* channel 0 */
+		payload[5] = 0;/* AudioSource, SDI1 */
+		payload[6] = 0x00;/* SlotNr, Slot 0 */
+		/* channel 1 */
+		payload[7] = 0;/* AudioSource, SDI1 */
+		payload[8] = 0x01;/* SlotNr, Slot 1 */
+		ret = i2c_master_send(dev_data->i2c, payload, 9);
+
+	return ret;
+}
+
 static const struct snd_soc_dai_ops tdf8532_dai_ops = {
+	.hw_params = tdf8532_hw_params,
 	.trigger  = tdf8532_dai_trigger,
 	.digital_mute = tdf8532_mute,
 };
@@ -417,11 +460,11 @@ static int tdf8532_i2c_probe(struct i2c_client *i2c,
 	payload[10] = 0x0;/* BitClockDelay, no delay */
 	ret1 = i2c_master_send(dev_data->i2c, payload, 11);
 
-#if 0
+#if 1
 	/* set routing */
 	payload[0] = 0x02;
 	payload[1] = 0x00;
-	payload[2] = 0x08;
+	payload[2] = 0x06;
 	payload[3] = 0x80;/* ModuleId */
 	payload[4] = 0x28;/* CmdId, SetAudioRoutingConfig_cmd */
 	/* channel 0 */
