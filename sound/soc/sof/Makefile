@@ -11,9 +11,11 @@ snd-sof-pci-objs := sof-pci-dev.o
 snd-sof-acpi-objs := sof-acpi-dev.o
 snd-sof-platform-objs := sof-platform-dev.o
 snd-sof-nocodec-objs := nocodec.o
+snd-sof-apl-tdf8532-objs := apl-tdf8532.o
 
 obj-$(CONFIG_SND_SOC_SOF) += snd-sof.o
 obj-$(CONFIG_SND_SOC_SOF_NOCODEC) += snd-sof-nocodec.o
+obj-$(CONFIG_SND_SOC_SOF_APL_TDF8532) += snd-sof-apl-tdf8532.o
 
 obj-$(CONFIG_SND_SOC_SOF_ACPI) += sof-acpi-dev.o
 obj-$(CONFIG_SND_SOC_SOF_PCI) += sof-pci-dev.o

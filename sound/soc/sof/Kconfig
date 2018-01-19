@@ -10,6 +10,10 @@ config SND_SOC_SOF_PLATFORM
 config SND_SOC_SOF_NOCODEC
 	tristate
 
+config SND_SOC_SOF_APL_TDF8532
+	select SND_SOC_TDF8532
+	tristate
+
 config SND_SOC_SOF
 	tristate "Sound Open Firmware Support"
 	default m
@@ -67,6 +71,7 @@ config SND_SOC_SOF_BROADWELL
 config SND_SOC_SOF_APOLLOLAKE
 	tristate "SOF support for Apollolake"
 	select SND_SOC_SOF_PCI
+	select SND_SOC_SOF_APL_TDF8532
 	select SND_SOC_ACPI_INTEL_MATCH
 	help
           This adds support for Sound Open Firmware for Intel(R) platforms

@@ -35,6 +35,13 @@ static struct snd_soc_acpi_mach sof_bxt_machines[] = {
 		.sof_tplg_filename = "intel/reef-apl.tplg",
 		.asoc_plat_name = "0000:00:0e.0",
 	},
+	{
+		.id = "INT34C3",
+		.drv_name = "sof-tdf8532",
+		.sof_fw_filename = "intel/reef-apl.ri",
+		.sof_tplg_filename = "intel/reef-apl.tplg",
+		.asoc_plat_name = "0000:00:0e.0",
+	},
 };
 
 static struct sof_dev_desc bxt_desc = {
