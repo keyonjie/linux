@@ -5501,7 +5501,8 @@ EXPORT_SYMBOL_GPL(perf_unregister_guest_info_callbacks);
 
 static void
 perf_output_sample_regs(struct perf_output_handle *handle,
-			struct pt_regs *regs, u64 mask)
+			struct pt_regs *regs,
+			u64 *extra_regs, u64 mask)
 {
 	int bit;
 	DECLARE_BITMAP(_mask, 64);
@@ -5510,7 +5511,7 @@ perf_output_sample_regs(struct perf_output_handle *handle,
 	for_each_set_bit(bit, _mask, sizeof(mask) * BITS_PER_BYTE) {
 		u64 val;
 
-		val = perf_reg_value(regs, bit);
+		val = perf_reg_value(regs, extra_regs, bit);
 		perf_output_put(handle, val);
 	}
 }
@@ -5912,6 +5913,7 @@ void perf_output_sample(struct perf_output_handle *handle,
 			u64 mask = event->attr.sample_regs_user;
 			perf_output_sample_regs(handle,
 						data->regs_user.regs,
+						NULL,
 						mask);
 		}
 	}
@@ -5944,6 +5946,7 @@ void perf_output_sample(struct perf_output_handle *handle,
 
 			perf_output_sample_regs(handle,
 						data->regs_intr.regs,
+						data->extra_regs,
 						mask);
 		}
 	}
