@@ -150,6 +150,8 @@ static int get_token_dai_type(void *elem ,void *object, u32 offset, u32 size)
 static const struct sof_topology_token buffer_tokens[] = {
 	{SOF_TKN_BUF_SIZE, SND_SOC_TPLG_TUPLE_TYPE_WORD, get_token_u32,
 		offsetof(struct sof_ipc_buffer, size), 0},
+	{SOF_TKN_BUF_TYPE, SND_SOC_TPLG_TUPLE_TYPE_WORD, get_token_u32,
+		offsetof(struct sof_ipc_buffer, type), 0},
 };
 
 /* DAI */
@@ -554,8 +556,8 @@ static int sof_widget_load_buffer(struct snd_soc_component *scomp, int index,
 	sof_parse_tokens(scomp, &buffer, buffer_tokens,
 		ARRAY_SIZE(buffer_tokens), private->array, private->size);
 
-	dev_dbg(sdev->dev, "buffer %s: size %d\n",
-		swidget->widget->name, buffer.size);
+	dev_dbg(sdev->dev, "buffer %s: size %d, type %d\n",
+		swidget->widget->name, buffer.size, buffer.type);
 
 	return sof_ipc_tx_message(sdev->ipc,
 		buffer.comp.hdr.cmd, &buffer, sizeof(buffer), r, sizeof(*r));
