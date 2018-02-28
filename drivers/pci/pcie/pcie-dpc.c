@@ -281,16 +281,43 @@ static int dpc_probe(struct pcie_device *dev)
 	return status;
 }
 
-static void dpc_remove(struct pcie_device *dev)
+static void dpc_interrupt_enable(struct dpc_dev *dpc, bool enable)
 {
-	struct dpc_dev *dpc = get_service_data(dev);
-	struct pci_dev *pdev = dev->port;
+	struct pci_dev *pdev = dpc->dev->port;
 	u16 ctl;
 
 	pci_read_config_word(pdev, dpc->cap_pos + PCI_EXP_DPC_CTL, &ctl);
-	ctl &= ~(PCI_EXP_DPC_CTL_EN_NONFATAL | PCI_EXP_DPC_CTL_INT_EN);
+	if (enable)
+		ctl |= PCI_EXP_DPC_CTL_EN_NONFATAL | PCI_EXP_DPC_CTL_INT_EN;
+	else
+		ctl &= ~(PCI_EXP_DPC_CTL_EN_NONFATAL | PCI_EXP_DPC_CTL_INT_EN);
 	pci_write_config_word(pdev, dpc->cap_pos + PCI_EXP_DPC_CTL, ctl);
 }
+
+static void dpc_remove(struct pcie_device *dev)
+{
+	dpc_interrupt_enable(get_service_data(dev), false);
+}
+
+static int __maybe_unused dpc_suspend_late(struct device *dev)
+{
+	struct pcie_device *pcie = to_pcie_device(dev);
+
+	dpc_interrupt_enable(get_service_data(pcie), false);
+	return 0;
+}
+
+static int __maybe_unused dpc_resume_early(struct device *dev)
+{
+	struct pcie_device *pcie = to_pcie_device(dev);
+
+	dpc_interrupt_enable(get_service_data(pcie), true);
+	return 0;
+}
+
+static const struct dev_pm_ops dpc_pm_ops = {
+	SET_LATE_SYSTEM_SLEEP_PM_OPS(dpc_suspend_late, dpc_resume_early)
+};
 
 static struct pcie_port_service_driver dpcdriver = {
 	.name		= "dpc",
@@ -298,6 +325,7 @@ static struct pcie_port_service_driver dpcdriver = {
 	.service	= PCIE_PORT_SERVICE_DPC,
 	.probe		= dpc_probe,
 	.remove		= dpc_remove,
+	.driver.pm	= &dpc_pm_ops,
 };
 
 static int __init dpc_service_init(void)
