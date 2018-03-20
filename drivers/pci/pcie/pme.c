@@ -365,10 +365,11 @@ static bool pcie_pme_check_wakeup(struct pci_bus *bus)
 
 /**
  * pcie_pme_suspend - Suspend PCIe PME service device.
- * @srv: PCIe service device to suspend.
+ * @dev: PCIe service device to suspend.
  */
-static int pcie_pme_suspend(struct pcie_device *srv)
+static int pcie_pme_suspend(struct device *dev)
 {
+	struct pcie_device *srv = to_pcie_device(dev);
 	struct pcie_pme_service_data *data = get_service_data(srv);
 	struct pci_dev *port = srv->port;
 	bool wakeup;
@@ -400,10 +401,11 @@ static int pcie_pme_suspend(struct pcie_device *srv)
 
 /**
  * pcie_pme_resume - Resume PCIe PME service device.
- * @srv - PCIe service device to resume.
+ * @dev - PCIe service device to resume.
  */
-static int pcie_pme_resume(struct pcie_device *srv)
+static int pcie_pme_resume(struct device *dev)
 {
+	struct pcie_device *srv = to_pcie_device(dev);
 	struct pcie_pme_service_data *data = get_service_data(srv);
 
 	spin_lock_irq(&data->lock);
@@ -427,10 +429,14 @@ static int pcie_pme_resume(struct pcie_device *srv)
  */
 static void pcie_pme_remove(struct pcie_device *srv)
 {
-	pcie_pme_suspend(srv);
+	pcie_pme_suspend(&srv->device);
 	free_irq(srv->irq, srv);
 	kfree(get_service_data(srv));
 }
+
+static const struct dev_pm_ops pcie_pme_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(pcie_pme_suspend, pcie_pme_resume)
+};
 
 static struct pcie_port_service_driver pcie_pme_driver = {
 	.name		= "pcie_pme",
@@ -438,9 +444,8 @@ static struct pcie_port_service_driver pcie_pme_driver = {
 	.service	= PCIE_PORT_SERVICE_PME,
 
 	.probe		= pcie_pme_probe,
-	.suspend	= pcie_pme_suspend,
-	.resume		= pcie_pme_resume,
 	.remove		= pcie_pme_remove,
+	.driver.pm	= &pcie_pme_pm_ops,
 };
 
 /**
