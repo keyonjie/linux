@@ -268,19 +268,19 @@ static void pciehp_remove(struct pcie_device *dev)
 	pciehp_release_ctrl(ctrl);
 }
 
-#ifdef CONFIG_PM
-static int pciehp_suspend(struct pcie_device *dev)
+static int __maybe_unused pciehp_suspend(struct device *dev)
 {
 	return 0;
 }
 
-static int pciehp_resume(struct pcie_device *dev)
+static int __maybe_unused pciehp_resume(struct device *dev)
 {
+	struct pcie_device *pcie = to_pcie_device(dev);
 	struct controller *ctrl;
 	struct slot *slot;
 	u8 status;
 
-	ctrl = get_service_data(dev);
+	ctrl = get_service_data(pcie);
 
 	/* reinitialize the chipset's event detection logic */
 	pcie_reenable_notification(ctrl);
@@ -297,7 +297,10 @@ static int pciehp_resume(struct pcie_device *dev)
 	mutex_unlock(&slot->hotplug_lock);
 	return 0;
 }
-#endif /* PM */
+
+static const struct dev_pm_ops pciehp_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(pciehp_suspend, pciehp_resume)
+};
 
 static struct pcie_port_service_driver hpdriver_portdrv = {
 	.name		= PCIE_MODULE_NAME,
@@ -307,10 +310,7 @@ static struct pcie_port_service_driver hpdriver_portdrv = {
 	.probe		= pciehp_probe,
 	.remove		= pciehp_remove,
 
-#ifdef	CONFIG_PM
-	.suspend	= pciehp_suspend,
-	.resume		= pciehp_resume,
-#endif	/* PM */
+	.driver.pm	= &pciehp_pm_ops,
 };
 
 static int __init pcied_init(void)
