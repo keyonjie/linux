@@ -56,18 +56,17 @@ static int pcie_portdrv_restore_config(struct pci_dev *dev)
 	return 0;
 }
 
-#ifdef CONFIG_PM
-static int pcie_port_runtime_suspend(struct device *dev)
+static int __maybe_unused pcie_port_runtime_suspend(struct device *dev)
 {
 	return to_pci_dev(dev)->bridge_d3 ? 0 : -EBUSY;
 }
 
-static int pcie_port_runtime_resume(struct device *dev)
+static int __maybe_unused pcie_port_runtime_resume(struct device *dev)
 {
 	return 0;
 }
 
-static int pcie_port_runtime_idle(struct device *dev)
+static int __maybe_unused pcie_port_runtime_idle(struct device *dev)
 {
 	/*
 	 * Assume the PCI core has set bridge_d3 whenever it thinks the port
@@ -78,23 +77,9 @@ static int pcie_port_runtime_idle(struct device *dev)
 }
 
 static const struct dev_pm_ops pcie_portdrv_pm_ops = {
-	.suspend	= pcie_port_device_suspend,
-	.resume		= pcie_port_device_resume,
-	.freeze		= pcie_port_device_suspend,
-	.thaw		= pcie_port_device_resume,
-	.poweroff	= pcie_port_device_suspend,
-	.restore	= pcie_port_device_resume,
-	.runtime_suspend = pcie_port_runtime_suspend,
-	.runtime_resume	= pcie_port_runtime_resume,
-	.runtime_idle	= pcie_port_runtime_idle,
+	SET_RUNTIME_PM_OPS(pcie_port_runtime_suspend, pcie_port_runtime_resume,
+			   pcie_port_runtime_idle)
 };
-
-#define PCIE_PORTDRV_PM_OPS	(&pcie_portdrv_pm_ops)
-
-#else /* !PM */
-
-#define PCIE_PORTDRV_PM_OPS	NULL
-#endif /* !PM */
 
 /*
  * pcie_portdrv_probe - Probe PCI-Express port devices
@@ -225,7 +210,7 @@ static struct pci_driver pcie_portdriver = {
 
 	.err_handler	= &pcie_portdrv_err_handler,
 
-	.driver.pm	= PCIE_PORTDRV_PM_OPS,
+	.driver.pm	= &pcie_portdrv_pm_ops,
 };
 
 static int __init dmi_pcie_pme_disable_msi(const struct dmi_system_id *d)
