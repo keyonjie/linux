@@ -27,7 +27,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
 #include <linux/seq_file.h>
-#include <linux/io-64-nonatomic-lo-hi.h>
 
 #include "intel-lpss.h"
 
@@ -56,7 +55,8 @@
 #define LPSS_PRIV_SSP_REG		0x20
 #define LPSS_PRIV_SSP_REG_DIS_DMA_FIN	BIT(0)
 
-#define LPSS_PRIV_REMAP_ADDR		0x40
+#define LPSS_PRIV_REMAP_ADDR_LO		0x40
+#define LPSS_PRIV_REMAP_ADDR_HI		0x44
 
 #define LPSS_PRIV_CAPS			0xfc
 #define LPSS_PRIV_CAPS_NO_IDMA		BIT(8)
@@ -259,7 +259,20 @@ static void intel_lpss_set_remap_addr(const struct intel_lpss *lpss)
 {
 	resource_size_t addr = lpss->info->mem->start;
 
-	lo_hi_writeq(addr, lpss->priv + LPSS_PRIV_REMAP_ADDR);
+	/*
+	 * On Intel Cannolake and newer SoCs the driver must do a
+	 * non-posted write to the device for this register, otherwise
+	 * bus master aborts a transaction and brings a system to
+	 * non-recoverable state.
+	 *
+	 * At the same time we may not use writeq() because the bridge
+	 * behind IOSF splits it to two 32-bit writes with the outcome
+	 * described in above paragraph.
+	 */
+	writel(lower_32_bits(addr), lpss->priv + LPSS_PRIV_REMAP_ADDR_LO);
+	readl(lpss->priv + LPSS_PRIV_REMAP_ADDR_LO);
+	writel(upper_32_bits(addr), lpss->priv + LPSS_PRIV_REMAP_ADDR_HI);
+	readl(lpss->priv + LPSS_PRIV_REMAP_ADDR_HI);
 }
 
 static void intel_lpss_deassert_reset(const struct intel_lpss *lpss)
