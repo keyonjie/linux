@@ -1844,12 +1844,15 @@ group_sched_out(struct perf_event *group_event,
 		struct perf_cpu_context *cpuctx,
 		struct perf_event_context *ctx)
 {
+	struct pmu *pmu = ctx->pmu;
 	struct perf_event *event;
 
 	if (group_event->state != PERF_EVENT_STATE_ACTIVE)
 		return;
 
 	perf_pmu_disable(ctx->pmu);
+
+	pmu->start_txn(pmu, PERF_PMU_TXN_REMOVE);
 
 	event_sched_out(group_event, cpuctx, ctx);
 
@@ -1863,6 +1866,8 @@ group_sched_out(struct perf_event *group_event,
 
 	if (group_event->attr.exclusive)
 		cpuctx->exclusive = 0;
+
+	pmu->commit_txn(pmu);
 }
 
 #define DETACH_GROUP	0x01UL
@@ -4560,6 +4565,20 @@ static void _perf_event_reset(struct perf_event *event)
 {
 	(void)perf_event_read(event, false);
 	local64_set(&event->count, 0);
+	if (event->pmu->reset) {
+		raw_spin_lock_irq(&event->ctx->lock);
+		/*
+		 * Only handle simple cases of currently active events,
+		 * because this is mainly interesting with RDPMC,
+		 * and there shouldn't normally be multiplexing.
+		 *
+		 * Should report an error otherwise.
+		 */
+		if (event->state == PERF_EVENT_STATE_ACTIVE ||
+		    READ_ONCE(event->oncpu) == raw_smp_processor_id())
+			event->pmu->reset(event);
+		raw_spin_unlock_irq(&event->ctx->lock);
+	}
 	perf_event_update_userpage(event);
 }
 
@@ -5501,7 +5520,8 @@ EXPORT_SYMBOL_GPL(perf_unregister_guest_info_callbacks);
 
 static void
 perf_output_sample_regs(struct perf_output_handle *handle,
-			struct pt_regs *regs, u64 mask)
+			struct pt_regs *regs,
+			u64 *extra_regs, u64 mask)
 {
 	int bit;
 	DECLARE_BITMAP(_mask, 64);
@@ -5510,7 +5530,7 @@ perf_output_sample_regs(struct perf_output_handle *handle,
 	for_each_set_bit(bit, _mask, sizeof(mask) * BITS_PER_BYTE) {
 		u64 val;
 
-		val = perf_reg_value(regs, bit);
+		val = perf_reg_value(regs, extra_regs, bit);
 		perf_output_put(handle, val);
 	}
 }
@@ -5912,6 +5932,7 @@ void perf_output_sample(struct perf_output_handle *handle,
 			u64 mask = event->attr.sample_regs_user;
 			perf_output_sample_regs(handle,
 						data->regs_user.regs,
+						NULL,
 						mask);
 		}
 	}
@@ -5944,6 +5965,7 @@ void perf_output_sample(struct perf_output_handle *handle,
 
 			perf_output_sample_regs(handle,
 						data->regs_intr.regs,
+						data->extra_regs,
 						mask);
 		}
 	}
