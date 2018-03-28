@@ -1231,7 +1231,7 @@ static int mmc_blk_rpmb_process(struct mmc_blk_data *md,
 	if (!card || !mmc_card_mmc(card))
 		return -ENODEV;
 
-	mmc_get_card(card);
+	mmc_get_card(card, NULL);
 
 	/* switch to RPMB partition */
 	ret = mmc_blk_part_switch(card, md->part_type);
@@ -1262,7 +1262,7 @@ static int mmc_blk_rpmb_process(struct mmc_blk_data *md,
 	main_md = dev_get_drvdata(&card->dev);
 	mmc_blk_part_switch(card, main_md->part_type);
 out:
-	mmc_put_card(card);
+	mmc_put_card(card, NULL);
 	return ret;
 }
 
