@@ -153,6 +153,8 @@ static int intel_xhci_usb_probe(struct platform_device *pdev)
 				     allow_userspace_ctrl_ids[i].hrv))
 			sw_desc.allow_userspace_control = true;
 
+	sw_desc.allow_userspace_control = true;
+
 	platform_set_drvdata(pdev, data);
 
 	data->role_sw = usb_role_switch_register(dev, &sw_desc);
