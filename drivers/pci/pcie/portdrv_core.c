@@ -15,22 +15,10 @@
 #include <linux/pm_runtime.h>
 #include <linux/string.h>
 #include <linux/slab.h>
-#include <linux/pcieport_if.h>
 #include <linux/aer.h>
 
 #include "../pci.h"
 #include "portdrv.h"
-
-bool pciehp_msi_disabled;
-
-static int __init pciehp_setup(char *str)
-{
-	if (!strncmp(str, "nomsi", 5))
-		pciehp_msi_disabled = true;
-
-	return 1;
-}
-__setup("pcie_hp=", pciehp_setup);
 
 /**
  * release_pcie_device - free PCI Express port service device structure
@@ -169,14 +157,11 @@ static int pcie_init_service_irqs(struct pci_dev *dev, int *irqs, int mask)
 		irqs[i] = -1;
 
 	/*
-	 * If we support PME or hotplug, but we can't use MSI/MSI-X for
-	 * them, we have to fall back to INTx or other interrupts, e.g., a
-	 * system shared interrupt.
+	 * If we support PME but can't use MSI/MSI-X for it, we have to
+	 * fall back to INTx or other interrupts, e.g., a system shared
+	 * interrupt.
 	 */
 	if ((mask & PCIE_PORT_SERVICE_PME) && pcie_pme_no_msi())
-		goto legacy_irq;
-
-	if ((mask & PCIE_PORT_SERVICE_HP) && pciehp_no_msi())
 		goto legacy_irq;
 
 	/* Try to use MSI-X or MSI if supported */
@@ -189,10 +174,8 @@ legacy_irq:
 	if (ret < 0)
 		return -ENODEV;
 
-	for (i = 0; i < PCIE_PORT_DEVICE_MAXSERVICES; i++) {
-		if (i != PCIE_PORT_SERVICE_VC_SHIFT)
-			irqs[i] = pci_irq_vector(dev, 0);
-	}
+	for (i = 0; i < PCIE_PORT_DEVICE_MAXSERVICES; i++)
+		irqs[i] = pci_irq_vector(dev, 0);
 
 	return 0;
 }
@@ -209,23 +192,13 @@ legacy_irq:
  */
 static int get_port_device_capability(struct pci_dev *dev)
 {
+	struct pci_host_bridge *host = pci_find_host_bridge(dev->bus);
 	int services = 0;
-	int cap_mask = 0;
 
-	if (pcie_ports_disabled)
-		return 0;
-
-	cap_mask = PCIE_PORT_SERVICE_PME | PCIE_PORT_SERVICE_HP
-			| PCIE_PORT_SERVICE_VC;
-	if (pci_aer_available())
-		cap_mask |= PCIE_PORT_SERVICE_AER | PCIE_PORT_SERVICE_DPC;
-
-	if (pcie_ports_auto)
-		pcie_port_platform_notify(dev, &cap_mask);
-
-	/* Hot-Plug Capable */
-	if ((cap_mask & PCIE_PORT_SERVICE_HP) && dev->is_hotplug_bridge) {
+	if (dev->is_hotplug_bridge &&
+	    (pcie_ports_native || host->use_hotplug)) {
 		services |= PCIE_PORT_SERVICE_HP;
+
 		/*
 		 * Disable hot-plug interrupts in case they have been enabled
 		 * by the BIOS and the hot-plug service driver is not loaded.
@@ -233,23 +206,27 @@ static int get_port_device_capability(struct pci_dev *dev)
 		pcie_capability_clear_word(dev, PCI_EXP_SLTCTL,
 			  PCI_EXP_SLTCTL_CCIE | PCI_EXP_SLTCTL_HPIE);
 	}
-	/* AER capable */
-	if ((cap_mask & PCIE_PORT_SERVICE_AER)
-	    && pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ERR)) {
+
+	if (pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ERR) &&
+	    pci_aer_available() && (pcie_ports_native || host->use_aer)) {
 		services |= PCIE_PORT_SERVICE_AER;
+
 		/*
 		 * Disable AER on this port in case it's been enabled by the
 		 * BIOS (the AER service driver will enable it when necessary).
 		 */
 		pci_disable_pcie_error_reporting(dev);
 	}
-	/* VC support */
-	if (pci_find_ext_capability(dev, PCI_EXT_CAP_ID_VC))
-		services |= PCIE_PORT_SERVICE_VC;
-	/* Root ports are capable of generating PME too */
-	if ((cap_mask & PCIE_PORT_SERVICE_PME)
-	    && pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT) {
+
+	/*
+	 * Root ports are capable of generating PME too.  Root Complex
+	 * Event Collectors can also generate PMEs, but we don't handle
+	 * those yet.
+	 */
+	if (pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT &&
+	    (pcie_ports_native || host->use_pme)) {
 		services |= PCIE_PORT_SERVICE_PME;
+
 		/*
 		 * Disable PME interrupt on this port in case it's been enabled
 		 * by the BIOS (the PME service driver will enable it when
@@ -257,7 +234,9 @@ static int get_port_device_capability(struct pci_dev *dev)
 		 */
 		pcie_pme_interrupt_enable(dev, false);
 	}
-	if (pci_find_ext_capability(dev, PCI_EXT_CAP_ID_DPC))
+
+	if (pci_find_ext_capability(dev, PCI_EXT_CAP_ID_DPC) &&
+	    pci_aer_available() && services & PCIE_PORT_SERVICE_AER)
 		services |= PCIE_PORT_SERVICE_DPC;
 
 	return services;
@@ -335,7 +314,7 @@ int pcie_port_device_register(struct pci_dev *dev)
 	 */
 	status = pcie_init_service_irqs(dev, irqs, capabilities);
 	if (status) {
-		capabilities &= PCIE_PORT_SERVICE_VC | PCIE_PORT_SERVICE_HP;
+		capabilities &= PCIE_PORT_SERVICE_HP;
 		if (!capabilities)
 			goto error_disable;
 	}
@@ -361,51 +340,6 @@ error_disable:
 	pci_disable_device(dev);
 	return status;
 }
-
-#ifdef CONFIG_PM
-static int suspend_iter(struct device *dev, void *data)
-{
-	struct pcie_port_service_driver *service_driver;
-
-	if ((dev->bus == &pcie_port_bus_type) && dev->driver) {
-		service_driver = to_service_driver(dev->driver);
-		if (service_driver->suspend)
-			service_driver->suspend(to_pcie_device(dev));
-	}
-	return 0;
-}
-
-/**
- * pcie_port_device_suspend - suspend port services associated with a PCIe port
- * @dev: PCI Express port to handle
- */
-int pcie_port_device_suspend(struct device *dev)
-{
-	return device_for_each_child(dev, NULL, suspend_iter);
-}
-
-static int resume_iter(struct device *dev, void *data)
-{
-	struct pcie_port_service_driver *service_driver;
-
-	if ((dev->bus == &pcie_port_bus_type) &&
-	    (dev->driver)) {
-		service_driver = to_service_driver(dev->driver);
-		if (service_driver->resume)
-			service_driver->resume(to_pcie_device(dev));
-	}
-	return 0;
-}
-
-/**
- * pcie_port_device_resume - resume port services associated with a PCIe port
- * @dev: PCI Express port to handle
- */
-int pcie_port_device_resume(struct device *dev)
-{
-	return device_for_each_child(dev, NULL, resume_iter);
-}
-#endif /* PM */
 
 static int remove_iter(struct device *dev, void *data)
 {

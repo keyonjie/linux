@@ -28,6 +28,10 @@ static int acpi_data_get_property_array(const struct acpi_device_data *data,
 static const guid_t prp_guid =
 	GUID_INIT(0xdaffd814, 0x6eba, 0x4d8c,
 		  0x8a, 0x91, 0xbc, 0x9b, 0xbf, 0x4a, 0xa3, 0x01);
+/* RTD3 GUID: 6211e2c0-58a3-4af3-90e1-927a4e0c55a4 */
+static const guid_t rtd3_guid =
+	GUID_INIT(0x6211e2c0, 0x58a3, 0x4af3,
+		  0x90, 0xe1, 0x92, 0x7a, 0x4e, 0x0c, 0x55, 0xa4);
 /* ACPI _DSD data subnodes GUID: dbb8e3e6-5886-4ba6-8795-1319f52a966b */
 static const guid_t ads_guid =
 	GUID_INIT(0xdbb8e3e6, 0x5886, 0x4ba6,
@@ -312,7 +316,8 @@ static bool acpi_extract_properties(const union acpi_object *desc,
 		    properties->type != ACPI_TYPE_PACKAGE)
 			break;
 
-		if (!guid_equal((guid_t *)guid->buffer.pointer, &prp_guid))
+		if (!guid_equal((guid_t *)guid->buffer.pointer, &prp_guid) &&
+		    !guid_equal((guid_t *)guid->buffer.pointer, &rtd3_guid))
 			continue;
 
 		/*

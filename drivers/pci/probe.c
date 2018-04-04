@@ -540,6 +540,16 @@ struct pci_host_bridge *pci_alloc_host_bridge(size_t priv)
 	INIT_LIST_HEAD(&bridge->windows);
 	bridge->dev.release = pci_release_host_bridge_dev;
 
+	/*
+	 * We assume we can manage these PCIe features.  Some systems may
+	 * reserve these for use by the platform itself, e.g., an ACPI BIOS
+	 * may implement its own AER handling and use _OSC to prevent the
+	 * OS from interfering.
+	 */
+	bridge->use_aer = 1;
+	bridge->use_hotplug = 1;
+	bridge->use_pme = 1;
+
 	return bridge;
 }
 EXPORT_SYMBOL(pci_alloc_host_bridge);
@@ -1229,6 +1239,13 @@ EXPORT_SYMBOL(pci_scan_bridge);
 static void pci_read_irq(struct pci_dev *dev)
 {
 	unsigned char irq;
+
+	/* VFs are not allowed to use INTx, so skip the config reads */
+	if (dev->is_virtfn) {
+		dev->pin = 0;
+		dev->irq = 0;
+		return;
+	}
 
 	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &irq);
 	dev->pin = irq;
@@ -2121,6 +2138,9 @@ static void pci_init_capabilities(struct pci_dev *dev)
 
 	/* Advanced Error Reporting */
 	pci_aer_init(dev);
+
+	if (pci_probe_reset_function(dev) == 0)
+		dev->reset_fn = 1;
 }
 
 /*
@@ -2561,7 +2581,10 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
 	for_each_pci_bridge(dev, bus) {
 		cmax = max;
 		max = pci_scan_bridge_extend(bus, dev, max, 0, 0);
-		used_buses += cmax - max;
+		/* Reserve one bus for each bridge */
+		used_buses++;
+		if (cmax - max > 1)
+			used_buses += cmax - max - 1;
 	}
 
 	/* Scan bridges that need to be reconfigured */
@@ -2584,12 +2607,14 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
 			 * bridges if any.
 			 */
 			buses = available_buses / hotplug_bridges;
-			buses = min(buses, available_buses - used_buses);
+			buses = min(buses, available_buses - used_buses + 1);
 		}
 
 		cmax = max;
 		max = pci_scan_bridge_extend(bus, dev, cmax, buses, 1);
-		used_buses += max - cmax;
+		/* One bus is already accounted so don't add it again */
+		if (max - cmax > 1)
+			used_buses += max - cmax - 1;
 	}
 
 	/*
