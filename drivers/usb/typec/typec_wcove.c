@@ -8,6 +8,7 @@
 
 #include <linux/acpi.h>
 #include <linux/module.h>
+#include <linux/usb/role.h>
 #include <linux/usb/tcpm.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
@@ -153,6 +154,8 @@ struct wcove_typec {
 
 	struct tcpc_dev tcpc;
 	struct tcpm_port *tcpm;
+
+	struct usb_role_switch *role_sw;
 };
 
 #define tcpc_to_wcove(_tcpc_) container_of(_tcpc_, struct wcove_typec, tcpc)
@@ -201,6 +204,10 @@ static int wcove_init(struct tcpc_dev *tcpc)
 {
 	struct wcove_typec *wcove = tcpc_to_wcove(tcpc);
 	int ret;
+
+	ret = regmap_write(wcove->regmap, USBC_CONTROL1, 0);
+	if (ret)
+		return ret;
 
 	/* Unmask everything */
 	ret = regmap_write(wcove->regmap, USBC_IRQMASK1, 0);
@@ -285,8 +292,30 @@ static int wcove_get_cc(struct tcpc_dev *tcpc, enum typec_cc_status *cc1,
 
 static int wcove_set_cc(struct tcpc_dev *tcpc, enum typec_cc_status cc)
 {
-	/* XXX: Relying on the HW FSM to configure things correctly for now */
-	return 0;
+	struct wcove_typec *wcove = tcpc_to_wcove(tcpc);
+	unsigned int ctrl;
+
+	switch (cc) {
+	case TYPEC_CC_RD:
+		ctrl = USBC_CONTROL1_MODE_SNK;
+		break;
+	case TYPEC_CC_RP_DEF:
+		ctrl = USBC_CONTROL1_CURSRC_UA_80 | USBC_CONTROL1_MODE_SRC;
+		break;
+	case TYPEC_CC_RP_1_5:
+		ctrl = USBC_CONTROL1_CURSRC_UA_180 | USBC_CONTROL1_MODE_SRC;
+		break;
+	case TYPEC_CC_RP_3_0:
+		ctrl = USBC_CONTROL1_CURSRC_UA_330 | USBC_CONTROL1_MODE_SRC;
+		break;
+	case TYPEC_CC_OPEN:
+		ctrl = 0;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return regmap_write(wcove->regmap, USBC_CONTROL1, ctrl);
 }
 
 static int wcove_set_polarity(struct tcpc_dev *tcpc, enum typec_cc_polarity pol)
@@ -305,11 +334,14 @@ static int wcove_set_roles(struct tcpc_dev *tcpc, bool attached,
 			   enum typec_role role, enum typec_data_role data)
 {
 	struct wcove_typec *wcove = tcpc_to_wcove(tcpc);
+	enum usb_role urole = USB_ROLE_NONE;
 	unsigned int val;
 	int ret;
 
-	ret = wcove_typec_func(wcove, WCOVE_FUNC_ROLE, data == TYPEC_HOST ?
-			       WCOVE_ROLE_HOST : WCOVE_ROLE_DEVICE);
+	if (attached)
+		urole = (data == TYPEC_HOST) ? USB_ROLE_HOST : USB_ROLE_DEVICE;
+
+	ret = usb_role_switch_set_role(wcove->role_sw, urole);
 	if (ret)
 		return ret;
 
@@ -572,6 +604,7 @@ static struct tcpc_config wcove_typec_config = {
 	.operating_snk_mw = 15000,
 
 	.type = TYPEC_PORT_DRP,
+	.data = TYPEC_PORT_DRD,
 	.default_role = TYPEC_SINK,
 };
 
@@ -624,10 +657,17 @@ static int wcove_typec_probe(struct platform_device *pdev)
 	if (IS_ERR(wcove->tcpm))
 		return PTR_ERR(wcove->tcpm);
 
+	wcove->role_sw = usb_role_switch_get(&pdev->dev);
+	if (IS_ERR_OR_NULL(wcove->role_sw)) {
+		tcpm_unregister_port(wcove->tcpm);
+		return -ENODEV;
+	}
+
 	ret = devm_request_threaded_irq(&pdev->dev, irq, NULL,
 					wcove_typec_irq, IRQF_ONESHOT,
 					"wcove_typec", wcove);
 	if (ret) {
+		usb_role_switch_put(wcove->role_sw);
 		tcpm_unregister_port(wcove->tcpm);
 		return ret;
 	}
@@ -647,6 +687,7 @@ static int wcove_typec_remove(struct platform_device *pdev)
 	regmap_read(wcove->regmap, USBC_IRQMASK2, &val);
 	regmap_write(wcove->regmap, USBC_IRQMASK2, val | USBC_IRQMASK2_ALL);
 
+	usb_role_switch_put(wcove->role_sw);
 	tcpm_unregister_port(wcove->tcpm);
 
 	return 0;
