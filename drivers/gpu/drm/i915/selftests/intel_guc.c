@@ -31,16 +31,24 @@ static struct intel_guc_client *clients[ATTEMPTS];
 
 static bool available_dbs(struct intel_guc *guc, u32 priority)
 {
-	unsigned long offset;
+	unsigned long offset = 0;
 	unsigned long end;
 	u16 id;
 
-	/* first half is used for normal priority, second half for high */
-	offset = 0;
-	end = GUC_NUM_DOORBELLS / 2;
-	if (priority <= GUC_CLIENT_PRIORITY_HIGH) {
-		offset = end;
-		end += offset;
+	if (!HAS_GUC_DIST_DB(guc_to_i915(guc))) {
+		/* first half is used for normal priority,
+		 * second half for high.
+		 */
+		end = GUC_NUM_DOORBELLS / 2;
+		if (priority <= GUC_CLIENT_PRIORITY_HIGH) {
+			offset = end;
+			end += offset;
+		}
+	} else {
+		/* no need to replicate __reserve_doorbell logic here */
+		end = guc->num_sqidi_supported *
+			guc->num_of_doorbells_per_sqidi;
+		GEM_BUG_ON(end > GUC_NUM_DOORBELLS);
 	}
 
 	id = find_next_zero_bit(guc->doorbell_bitmap, end, offset);
@@ -53,9 +61,17 @@ static bool available_dbs(struct intel_guc *guc, u32 priority)
 static int check_all_doorbells(struct intel_guc *guc)
 {
 	u16 db_id;
+	u32 num_doorbells;
 
-	pr_info_once("Max number of doorbells: %d", GUC_NUM_DOORBELLS);
-	for (db_id = 0; db_id < GUC_NUM_DOORBELLS; ++db_id) {
+	if (!HAS_GUC_DIST_DB(guc_to_i915(guc)))
+		num_doorbells = GUC_NUM_DOORBELLS;
+	else
+		num_doorbells = guc->num_sqidi_supported *
+				guc->num_of_doorbells_per_sqidi;
+
+	GEM_BUG_ON(num_doorbells == 0);
+	pr_info_once("Max number of doorbells: %d", num_doorbells);
+	for (db_id = 0; db_id < num_doorbells; ++db_id) {
 		if (!doorbell_ok(guc, db_id)) {
 			pr_err("doorbell %d, not ok\n", db_id);
 			return -EIO;
@@ -87,7 +103,7 @@ static int validate_client(struct intel_guc_client *client,
 
 static bool client_doorbell_in_sync(struct intel_guc_client *client)
 {
-	return doorbell_ok(client->guc, client->doorbell_id);
+	return !client || doorbell_ok(client->guc, client->doorbell_id);
 }
 
 /*
@@ -137,7 +153,6 @@ static int igt_guc_clients(void *args)
 		goto unlock;
 	}
 	GEM_BUG_ON(!guc->execbuf_client);
-	GEM_BUG_ON(!guc->preempt_client);
 
 	err = validate_client(guc->execbuf_client,
 			      GUC_CLIENT_PRIORITY_KMD_NORMAL, false);
@@ -146,16 +161,18 @@ static int igt_guc_clients(void *args)
 		goto out;
 	}
 
-	err = validate_client(guc->preempt_client,
-			      GUC_CLIENT_PRIORITY_KMD_HIGH, true);
-	if (err) {
-		pr_err("preempt client validation failed\n");
-		goto out;
+	if (guc->preempt_client) {
+		err = validate_client(guc->preempt_client,
+				      GUC_CLIENT_PRIORITY_KMD_HIGH, true);
+		if (err) {
+			pr_err("preempt client validation failed\n");
+			goto out;
+		}
 	}
 
 	/* each client should now have reserved a doorbell */
 	if (!has_doorbell(guc->execbuf_client) ||
-	    !has_doorbell(guc->preempt_client)) {
+	    (guc->preempt_client && !has_doorbell(guc->preempt_client))) {
 		pr_err("guc_clients_create didn't reserve doorbells\n");
 		err = -EINVAL;
 		goto out;
@@ -224,7 +241,8 @@ out:
 	 * clients during unload.
 	 */
 	destroy_doorbell(guc->execbuf_client);
-	destroy_doorbell(guc->preempt_client);
+	if (guc->preempt_client)
+		destroy_doorbell(guc->preempt_client);
 	guc_clients_destroy(guc);
 	guc_clients_create(guc);
 	guc_clients_doorbell_init(guc);

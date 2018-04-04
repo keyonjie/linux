@@ -71,16 +71,23 @@ struct intel_guc_ct_channel {
 /** Holds all command transport channels.
  *
  * @host_channel: main channel used by the host
+ * @lock: spin lock for pending requests list
+ * @pending_requests: list of pending requests
+ * @incoming_requests: list of incoming requests
+ * @tasklet: tasklet for handling incoming requests
  */
 struct intel_guc_ct {
 	struct intel_guc_ct_channel host_channel;
 	/* other channels are tbd */
+
+	spinlock_t lock;
+	struct list_head pending_requests;
+	struct list_head incoming_requests;
+	struct work_struct worker;
 };
 
 void intel_guc_ct_init_early(struct intel_guc_ct *ct);
-
-/* XXX: move to intel_uc.h ? don't fit there either */
-int intel_guc_enable_ct(struct intel_guc *guc);
-void intel_guc_disable_ct(struct intel_guc *guc);
+int intel_guc_ct_enable(struct intel_guc_ct *ct);
+void intel_guc_ct_disable(struct intel_guc_ct *ct);
 
 #endif /* _INTEL_GUC_CT_H_ */

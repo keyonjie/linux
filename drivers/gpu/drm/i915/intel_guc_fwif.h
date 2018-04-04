@@ -24,6 +24,8 @@
 #define _INTEL_GUC_FWIF_H
 
 #define GUC_CORE_FAMILY_GEN9		12
+#define GUC_CORE_FAMILY_GEN11		14
+#define GUC_CORE_FAMILY_GEN12		15
 #define GUC_CORE_FAMILY_UNKNOWN		0x7fffffff
 
 #define GUC_CLIENT_PRIORITY_KMD_HIGH	0
@@ -32,8 +34,12 @@
 #define GUC_CLIENT_PRIORITY_NORMAL	3
 #define GUC_CLIENT_PRIORITY_NUM		4
 
-#define GUC_MAX_STAGE_DESCRIPTORS	1024
-#define	GUC_INVALID_STAGE_ID		GUC_MAX_STAGE_DESCRIPTORS
+#define GEN9_GUC_MAX_STAGE_DESCRIPTORS	1024
+#define   GEN9_GUC_INVALID_STAGE_ID	GEN9_GUC_MAX_STAGE_DESCRIPTORS
+#define GEN11_GUC_MAX_STAGE_DESCRIPTORS	2032
+#define   GEN11_GUC_INVALID_STAGE_ID	GEN11_GUC_MAX_STAGE_DESCRIPTORS
+
+#define GUC_MAX_LRC_PER_CLASS		64
 
 #define GUC_RENDER_ENGINE		0
 #define GUC_VIDEO_ENGINE		1
@@ -41,6 +47,14 @@
 #define GUC_VIDEOENHANCE_ENGINE		3
 #define GUC_VIDEO_ENGINE2		4
 #define GUC_MAX_ENGINES_NUM		(GUC_VIDEO_ENGINE2 + 1)
+
+#define GUC_RENDER_CLASS	0
+#define GUC_VIDEO_CLASS		1
+#define GUC_VIDEOENHANCE_CLASS	2
+#define GUC_BLITTER_CLASS	3
+#define GUC_COMPUTE_CLASS	4
+#define GUC_MAX_ENGINE_CLASSES	(GUC_COMPUTE_CLASS + 1)
+#define GUC_MAX_INSTANCES_PER_CLASS	4
 
 /* Work queue item header definitions */
 #define WQ_STATUS_ACTIVE		1
@@ -53,10 +67,14 @@
 #define   WQ_TYPE_PSEUDO		(0x2 << WQ_TYPE_SHIFT)
 #define   WQ_TYPE_INORDER		(0x3 << WQ_TYPE_SHIFT)
 #define WQ_TARGET_SHIFT			10
+#define GEN11_WQ_TARGET_SHIFT		8
 #define WQ_LEN_SHIFT			16
 #define WQ_NO_WCFLUSH_WAIT		(1 << 27)
 #define WQ_PRESENT_WORKLOAD		(1 << 28)
 
+/* Work queue item submit element info definitions */
+#define GEN11_WQ_SW_CTX_INDEX_SHIFT	0
+#define GEN11_WQ_SW_COUNTER_SHIFT	11
 #define WQ_RING_TAIL_SHIFT		20
 #define WQ_RING_TAIL_MAX		0x7FF	/* 2^11 QWords */
 #define WQ_RING_TAIL_MASK		(WQ_RING_TAIL_MAX << WQ_RING_TAIL_SHIFT)
@@ -127,13 +145,49 @@
 #define   GUC_PROFILE_ENABLED		(1 << 7)
 #define   GUC_WQ_TRACK_ENABLED		(1 << 8)
 #define   GUC_ADS_ENABLED		(1 << 9)
-#define   GUC_DEBUG_RESERVED		(1 << 10)
+#define   GUC_LOG_DEFAULT_DISABLED	(1 << 10)
 #define   GUC_ADS_ADDR_SHIFT		11
 #define   GUC_ADS_ADDR_MASK		0xfffff800
 
-#define GUC_CTL_RSRVD			9
+#define GEN11_GUC_ADS_CTL		9
+#define   GEN11_GUC_ADS_ENABLE		(1 << 0)
+#define   GEN11_GUC_ADS_ADDR_SHIFT	1
 
 #define GUC_CTL_MAX_DWORDS		(SOFT_SCRATCH_COUNT - 2) /* [1..14] */
+
+/*
+ * The class goes in bits [0, 2] of the GuC ID, the instance in bits [3, 6]. Bit
+ * 7 can be used for operations that apply to all engine classes and instances.
+ */
+#define GEN11_GUC_ENGINE_CLASS_MASK	0x7
+#define GEN11_GUC_ENGINE_INSTANCE_SHIFT	3
+#define GEN11_GUC_ENGINE_INSTANCE_MASK	(0xf << GEN11_GUC_ENGINE_INSTANCE_SHIFT)
+#define GEN11_GUC_ENGINE_ALL_INSTANCES	BIT(7)
+
+#define GEN11_GUC_ENGINE_ID(class, instance) \
+	((class) | ((instance) << GEN11_GUC_ENGINE_INSTANCE_SHIFT))
+
+#define GEN11_GUC_ID_TO_ENGINE_CLASS(guc_id) ((guc_id) & GEN11_GUC_ENGINE_CLASS_MASK)
+#define GEN11_GUC_ID_TO_ENGINE_INSTANCE(guc_id) \
+	(((guc_id) & GEN11_GUC_ENGINE_INSTANCE_MASK) >> GEN11_GUC_ENGINE_INSTANCE_SHIFT)
+
+/*
+ * Some Host2GuC commands require the target engine (class + instance) in
+ * a slightly different format, having flags for each instance instead of
+ * just a single instance number. This allows sending commands to multiple
+ * instances of given class at once:
+ *  [15..0]  Engine Class
+ *  [16]     Instance_0
+ *  [17]     Instance_1
+ *  [18]     Instance_2
+ *  [19]     Instance_3
+ *  [31..20] Ignored
+ */
+#define GEN11_GUC_ENGINE_ID_FOR_H2G_INSTANCE_SHIFT	16
+#define GEN11_GUC_ENGINE_ID_FOR_H2G_INSTANCE(guc_id) \
+	(BIT(GEN11_GUC_ID_TO_ENGINE_INSTANCE(guc_id)) << GEN11_GUC_ENGINE_ID_FOR_H2G_INSTANCE_SHIFT)
+#define GEN11_GUC_ENGINE_ID_FOR_H2G(guc_id) \
+	(GEN11_GUC_ENGINE_ID_FOR_H2G_INSTANCE(guc_id) | GEN11_GUC_ID_TO_ENGINE_CLASS(guc_id))
 
 /**
  * DOC: GuC Firmware Layout
@@ -285,6 +339,60 @@ struct guc_execlist_context {
 	u16 engine_submit_queue_count;
 } __packed;
 
+/* ICL-specific version of the GuC stage descriptor */
+struct gen11_guc_stage_desc {
+	u32 sched_common_area;
+	u32 stage_id;
+	u32 pas_id;
+	u8 engines_used;
+	u32 engines_instance_used[GUC_MAX_ENGINE_CLASSES];
+
+	/* Work is submitted using doorbell and workqueue of this desc on behalf
+	 * of other entries in the desc pool (a.k.a. proxy submission). */
+	u16 is_proxy;
+	/* Work will be submitted using some other entry in the context desc
+	 * pool (a.k.a. proxy entry). */
+	u16 is_principal;
+
+	u64 db_trigger_cpu;
+	u32 db_trigger_uk;
+	u64 db_trigger_phy;
+	u16 db_id;
+
+	struct guc_execlist_context lrc[GUC_MAX_ENGINE_CLASSES][GUC_MAX_LRC_PER_CLASS];
+	DECLARE_BITMAP(lrc_bitmap[GUC_MAX_ENGINE_CLASSES], GUC_MAX_LRC_PER_CLASS);
+	u32 lrc_count;
+	u32 max_lrc_per_class;
+
+	u8 attribute;
+
+	u8 reserved[3];
+
+	u32 priority;
+
+	u32 wq_sampled_tail_offset;
+	u32 wq_total_submit_enqueues;
+
+	u32 process_desc;
+	u32 wq_addr;
+	u32 wq_size;
+
+	u32 engine_presence;
+
+	u8 engine_suspended;
+	u32 engines_suspended_per_class[GUC_MAX_ENGINE_CLASSES];
+
+	u8 reserved0[4];
+
+	u32 reserved1;
+	u64 reserved2[10];
+} __packed;
+
+struct gen11_guc_pooled_stage_desc {
+	struct gen11_guc_stage_desc desc;
+	u64 host_private; // back pointer for host usage
+} __packed;
+
 /*
  * This structure describes a stage set arranged for a particular communication
  * between uKernel (GuC) and Driver (KMD). Technically, this is known as a
@@ -407,6 +515,24 @@ struct guc_policy {
 	u32 reserved[2];
 } __packed;
 
+struct gen11_guc_policies {
+	struct guc_policy policy[GUC_CLIENT_PRIORITY_NUM][GUC_MAX_ENGINE_CLASSES];
+
+	/* In micro seconds. How much time to allow before DPC processing is
+	 * called back via interrupt (to prevent DPC queue drain starving).
+	 * Typically 1000s of micro seconds (example only, not granularity). */
+	u32 dpc_promote_time;
+
+	/* Must be set to take these new values. */
+	u32 is_valid;
+
+	/* Max number of WIs to process per call. A large value may keep CS
+	 * idle. */
+	u32 max_num_work_items;
+
+	u32 reserved[19];
+} __packed;
+
 struct guc_policies {
 	struct guc_policy policy[GUC_CLIENT_PRIORITY_NUM][GUC_MAX_ENGINES_NUM];
 
@@ -457,14 +583,66 @@ struct mmio_white_list {
 	u32 count;
 } __packed;
 
+/* Gen11+ GuC register sets */
+struct gen11_guc_mmio_reg_state {
+	struct guc_mmio_regset global_reg;
+	struct guc_mmio_regset engine_reg[GUC_MAX_ENGINE_CLASSES][GUC_MAX_INSTANCES_PER_CLASS];
+	struct mmio_white_list white_list[GUC_MAX_ENGINE_CLASSES];
+} __packed;
+
+/* GuC register sets */
 struct guc_mmio_reg_state {
 	struct guc_mmio_regset global_reg;
 	struct guc_mmio_regset engine_reg[GUC_MAX_ENGINES_NUM];
 	struct mmio_white_list white_list[GUC_MAX_ENGINES_NUM];
 } __packed;
 
-/* GuC Additional Data Struct */
+/* Gen11+ HW info */
+struct guc_gt_system_info {
+	u32 slice_enabled;
+	u32 rcs_enabled;
+	u32 ccs_enabled;
+	u32 bcs_enabled;
+	u32 vdbox_enable_mask;
+	u32 vdbox_sfc_support_mask;
+	u32 vebox_enable_mask;
+	u32 num_of_doorbells_per_sqidi;	/* GEN12+ */
+	u32 reserved[9];
+} __packed;
 
+struct guc_gt_system_additional_info {
+	u8 reserved0[26];
+	u32 gfx_address_command_transport_pool;
+	u16 command_transport_pool_count;
+	u8 reserved1[377];
+} __packed;
+
+struct guc_master_cmd_transport_buffer_alloc {
+	struct guc_ct_buffer_desc desc;
+	u32 reserved[7];
+} __packed;
+
+#define GUC_CMD_TRANSPORT_POOL_SIZE	2
+
+struct guc_master_cmd_transport_pool {
+	struct guc_master_cmd_transport_buffer_alloc pool[GUC_CMD_TRANSPORT_POOL_SIZE];
+} __packed;
+
+/* Gen11+ GuC Additional Data Struct */
+struct gen11_guc_ads {
+	u32 reg_state_addr;
+	u32 reg_state_buffer;
+	u32 golden_context_lrca;
+	u32 scheduler_policies;
+	u32 reserved0[2];
+	u32 gt_system_info;
+	u32 gt_system_additional_info;
+	u32 reserved1;
+	u32 eng_state_size[GUC_MAX_ENGINE_CLASSES];
+	u32 reserved2[4];
+} __packed;
+
+/* GuC Additional Data Struct */
 struct guc_ads {
 	u32 reg_state_addr;
 	u32 reg_state_buffer;
@@ -534,16 +712,6 @@ struct guc_log_buffer_state {
 	u32 version;
 } __packed;
 
-union guc_log_control {
-	struct {
-		u32 logging_enabled:1;
-		u32 reserved1:3;
-		u32 verbosity:4;
-		u32 reserved2:24;
-	};
-	u32 value;
-} __packed;
-
 struct guc_ctx_report {
 	u32 report_return_status;
 	u32 reserved1[64];
@@ -602,15 +770,26 @@ enum intel_guc_report_status {
 	INTEL_GUC_REPORT_STATUS_COMPLETE = 0x4,
 };
 
+#define GUC_LOG_CONTROL_LOGGING_ENABLED	(1 << 0)
+#define GUC_LOG_CONTROL_VERBOSITY_SHIFT	4
+#define GUC_LOG_CONTROL_VERBOSITY_MASK	(0xF << GUC_LOG_CONTROL_VERBOSITY_SHIFT)
+#define GUC_LOG_CONTROL_DEFAULT_LOGGING	(1 << 8)
+
 /*
  * The GuC sends its response to a command by overwriting the
  * command in SS0. The response is distinguishable from a command
  * by the fact that all the MASK bits are set. The remaining bits
  * give more detail.
+ * Bits [27:16] are reserved for optional data reporting.
  */
 #define	INTEL_GUC_RECV_MASK	((u32)0xF0000000)
 #define	INTEL_GUC_RECV_IS_RESPONSE(x)	((u32)(x) >= INTEL_GUC_RECV_MASK)
 #define	INTEL_GUC_RECV_STATUS(x)	(INTEL_GUC_RECV_MASK | (x))
+#define INTEL_GUC_RECV_DATA_SHIFT	16
+#define INTEL_GUC_RECV_DATA_MASK	(0xFFF << INTEL_GUC_RECV_DATA_SHIFT)
+#define INTEL_GUC_RECV_TO_STATUS(x)	((x) & ~INTEL_GUC_RECV_DATA_MASK)
+#define INTEL_GUC_RECV_TO_DATA(x)	(((x) & INTEL_GUC_RECV_DATA_MASK) >> \
+					 INTEL_GUC_RECV_DATA_SHIFT)
 
 /* GUC will return status back to SOFT_SCRATCH_O_REG */
 enum intel_guc_status {

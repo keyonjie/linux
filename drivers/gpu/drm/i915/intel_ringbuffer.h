@@ -3,11 +3,15 @@
 #define _INTEL_RINGBUFFER_H_
 
 #include <linux/hashtable.h>
+
 #include "i915_gem_batch_pool.h"
-#include "i915_gem_request.h"
 #include "i915_gem_timeline.h"
+
+#include "i915_reg.h"
 #include "i915_pmu.h"
+#include "i915_request.h"
 #include "i915_selftest.h"
+#include "intel_gpu_commands.h"
 
 struct drm_printer;
 
@@ -82,7 +86,7 @@ hangcheck_action_to_str(const enum intel_engine_hangcheck_action a)
 }
 
 #define I915_MAX_SLICES	3
-#define I915_MAX_SUBSLICES 3
+#define I915_MAX_SUBSLICES 8
 
 #define instdone_slice_mask(dev_priv__) \
 	(INTEL_GEN(dev_priv__) == 7 ? \
@@ -90,7 +94,7 @@ hangcheck_action_to_str(const enum intel_engine_hangcheck_action a)
 
 #define instdone_subslice_mask(dev_priv__) \
 	(INTEL_GEN(dev_priv__) == 7 ? \
-	 1 : INTEL_INFO(dev_priv__)->sseu.subslice_mask)
+	 1 : INTEL_INFO(dev_priv__)->sseu.subslice_mask[0])
 
 #define for_each_instdone_slice_subslice(dev_priv__, slice__, subslice__) \
 	for ((slice__) = 0, (subslice__) = 0; \
@@ -115,7 +119,7 @@ struct intel_engine_hangcheck {
 	unsigned long action_timestamp;
 	int deadlock;
 	struct intel_instdone instdone;
-	struct drm_i915_gem_request *active_request;
+	struct i915_request *active_request;
 	bool stalled;
 };
 
@@ -156,7 +160,10 @@ struct i915_ctx_workarounds {
 	struct i915_vma *vma;
 };
 
-struct drm_i915_gem_request;
+struct i915_request;
+
+#define I915_MAX_VCS	4
+#define I915_MAX_VECS	2
 
 /*
  * Engine IDs definitions.
@@ -167,8 +174,13 @@ enum intel_engine_id {
 	BCS,
 	VCS,
 	VCS2,
+	VCS3,
+	VCS4,
 #define _VCS(n) (VCS + (n))
-	VECS
+	VECS,
+	VECS2,
+#define _VECS(n) (VECS + (n))
+	CCS,
 };
 
 struct i915_priolist {
@@ -200,9 +212,17 @@ struct intel_engine_execlists {
 	bool no_priolist;
 
 	/**
-	 * @elsp: the ExecList Submission Port register
+	 * @submit_reg: gen-specific execlist submission register
+	 * set to the ExecList Submission Port (elsp) register pre-Gen11 and to
+	 * the ExecList Submission Queue Contents register array for Gen11+
 	 */
-	u32 __iomem *elsp;
+	u32 __iomem *submit_reg;
+
+	/**
+	 * @ctrl_reg: the enhanced execlists control register, used to load the
+	 * submit queue on the HW and to request preemptions to idle
+	 */
+	u32 __iomem *ctrl_reg;
 
 	/**
 	 * @port: execlist port states
@@ -218,7 +238,7 @@ struct intel_engine_execlists {
 		/**
 		 * @request_count: combined request and submission count
 		 */
-		struct drm_i915_gem_request *request_count;
+		struct i915_request *request_count;
 #define EXECLIST_COUNT_BITS 2
 #define port_request(p) ptr_mask_bits((p)->request_count, EXECLIST_COUNT_BITS)
 #define port_count(p) ptr_unmask_bits((p)->request_count, EXECLIST_COUNT_BITS)
@@ -256,6 +276,16 @@ struct intel_engine_execlists {
 	unsigned int port_mask;
 
 	/**
+	 * @queue_priority: Highest pending priority.
+	 *
+	 * When we add requests into the queue, or adjust the priority of
+	 * executing requests, we compute the maximum priority of those
+	 * pending requests. We can then use this value to determine if
+	 * we need to preempt the executing requests to service the queue.
+	 */
+	int queue_priority;
+
+	/**
 	 * @queue: queue of requests, in priority lists
 	 */
 	struct rb_root queue;
@@ -279,6 +309,11 @@ struct intel_engine_execlists {
 	 * @csb_use_mmio: access csb through mmio, instead of hwsp
 	 */
 	bool csb_use_mmio;
+
+	/**
+	 * @preempt_complete_status: expected CSB upon completing preemption
+	 */
+	u32 preempt_complete_status;
 };
 
 #define INTEL_ENGINE_CS_MAX_NAME 8
@@ -289,7 +324,9 @@ struct intel_engine_cs {
 
 	enum intel_engine_id id;
 	unsigned int hw_id;
+
 	unsigned int guc_id;
+	u8 guc_class;
 
 	u8 uabi_id;
 	u8 uabi_class;
@@ -298,7 +335,6 @@ struct intel_engine_cs {
 	u8 instance;
 	u32 context_size;
 	u32 mmio_base;
-	unsigned int irq_shift;
 
 	struct intel_ring *buffer;
 	struct intel_timeline *timeline;
@@ -332,9 +368,9 @@ struct intel_engine_cs {
 
 		spinlock_t rb_lock; /* protects the rb and wraps irq_lock */
 		struct rb_root waiters; /* sorted by retirement, priority */
-		struct rb_root signals; /* sorted by retirement */
+		struct list_head signals; /* sorted by retirement */
 		struct task_struct *signaler; /* used for fence signalling */
-		struct drm_i915_gem_request __rcu *first_signal;
+
 		struct timer_list fake_irq; /* used after a missed interrupt */
 		struct timer_list hangcheck; /* detect missed interrupts */
 
@@ -386,7 +422,7 @@ struct intel_engine_cs {
 
 	int		(*init_hw)(struct intel_engine_cs *engine);
 	void		(*reset_hw)(struct intel_engine_cs *engine,
-				    struct drm_i915_gem_request *req);
+				    struct i915_request *rq);
 
 	void		(*park)(struct intel_engine_cs *engine);
 	void		(*unpark)(struct intel_engine_cs *engine);
@@ -397,22 +433,20 @@ struct intel_engine_cs {
 					  struct i915_gem_context *ctx);
 	void		(*context_unpin)(struct intel_engine_cs *engine,
 					 struct i915_gem_context *ctx);
-	int		(*request_alloc)(struct drm_i915_gem_request *req);
-	int		(*init_context)(struct drm_i915_gem_request *req);
+	int		(*request_alloc)(struct i915_request *rq);
+	int		(*init_context)(struct i915_request *rq);
 
-	int		(*emit_flush)(struct drm_i915_gem_request *request,
-				      u32 mode);
+	int		(*emit_flush)(struct i915_request *request, u32 mode);
 #define EMIT_INVALIDATE	BIT(0)
 #define EMIT_FLUSH	BIT(1)
 #define EMIT_BARRIER	(EMIT_INVALIDATE | EMIT_FLUSH)
-	int		(*emit_bb_start)(struct drm_i915_gem_request *req,
+	int		(*emit_bb_start)(struct i915_request *rq,
 					 u64 offset, u32 length,
 					 unsigned int dispatch_flags);
 #define I915_DISPATCH_SECURE BIT(0)
 #define I915_DISPATCH_PINNED BIT(1)
 #define I915_DISPATCH_RS     BIT(2)
-	void		(*emit_breadcrumb)(struct drm_i915_gem_request *req,
-					   u32 *cs);
+	void		(*emit_breadcrumb)(struct i915_request *rq, u32 *cs);
 	int		emit_breadcrumb_sz;
 
 	/* Pass the request to the hardware queue (e.g. directly into
@@ -421,7 +455,7 @@ struct intel_engine_cs {
 	 * This is called from an atomic context with irqs disabled; must
 	 * be irq safe.
 	 */
-	void		(*submit_request)(struct drm_i915_gem_request *req);
+	void		(*submit_request)(struct i915_request *rq);
 
 	/* Call when the priority on a request has changed and it and its
 	 * dependencies may need rescheduling. Note the request itself may
@@ -429,8 +463,7 @@ struct intel_engine_cs {
 	 *
 	 * Called under the struct_mutex.
 	 */
-	void		(*schedule)(struct drm_i915_gem_request *request,
-				    int priority);
+	void		(*schedule)(struct i915_request *request, int priority);
 
 	/*
 	 * Cancel all requests on the hardware, or queued for execution.
@@ -498,9 +531,9 @@ struct intel_engine_cs {
 		} mbox;
 
 		/* AKA wait() */
-		int	(*sync_to)(struct drm_i915_gem_request *req,
-				   struct drm_i915_gem_request *signal);
-		u32	*(*signal)(struct drm_i915_gem_request *req, u32 *cs);
+		int	(*sync_to)(struct i915_request *rq,
+				   struct i915_request *signal);
+		u32	*(*signal)(struct i915_request *rq, u32 *cs);
 	} semaphore;
 
 	struct intel_engine_execlists execlists;
@@ -532,6 +565,8 @@ struct intel_engine_cs {
 
 #define I915_ENGINE_NEEDS_CMD_PARSER BIT(0)
 #define I915_ENGINE_SUPPORTS_STATS   BIT(1)
+#define I915_ENGINE_HAS_RCS_REG_STATE	BIT(2)
+#define I915_ENGINE_HAS_EU_PRIORITY	BIT(3)
 	unsigned int flags;
 
 	/*
@@ -654,7 +689,7 @@ intel_engine_flag(const struct intel_engine_cs *engine)
 }
 
 static inline u32
-intel_read_status_page(struct intel_engine_cs *engine, int reg)
+intel_read_status_page(const struct intel_engine_cs *engine, int reg)
 {
 	/* Ensure that the compiler doesn't optimize away the load. */
 	return READ_ONCE(engine->status_page.page_addr[reg]);
@@ -721,14 +756,12 @@ void intel_engine_cleanup(struct intel_engine_cs *engine);
 
 void intel_legacy_submission_resume(struct drm_i915_private *dev_priv);
 
-int __must_check intel_ring_cacheline_align(struct drm_i915_gem_request *req);
+int __must_check intel_ring_cacheline_align(struct i915_request *rq);
 
 int intel_ring_wait_for_space(struct intel_ring *ring, unsigned int bytes);
-u32 __must_check *intel_ring_begin(struct drm_i915_gem_request *req,
-				   unsigned int n);
+u32 __must_check *intel_ring_begin(struct i915_request *rq, unsigned int n);
 
-static inline void
-intel_ring_advance(struct drm_i915_gem_request *req, u32 *cs)
+static inline void intel_ring_advance(struct i915_request *rq, u32 *cs)
 {
 	/* Dummy function.
 	 *
@@ -738,22 +771,20 @@ intel_ring_advance(struct drm_i915_gem_request *req, u32 *cs)
 	 * reserved for the command packet (i.e. the value passed to
 	 * intel_ring_begin()).
 	 */
-	GEM_BUG_ON((req->ring->vaddr + req->ring->emit) != cs);
+	GEM_BUG_ON((rq->ring->vaddr + rq->ring->emit) != cs);
 }
 
-static inline u32
-intel_ring_wrap(const struct intel_ring *ring, u32 pos)
+static inline u32 intel_ring_wrap(const struct intel_ring *ring, u32 pos)
 {
 	return pos & (ring->size - 1);
 }
 
-static inline u32
-intel_ring_offset(const struct drm_i915_gem_request *req, void *addr)
+static inline u32 intel_ring_offset(const struct i915_request *rq, void *addr)
 {
 	/* Don't write ring->size (equivalent to 0) as that hangs some GPUs. */
-	u32 offset = addr - req->ring->vaddr;
-	GEM_BUG_ON(offset > req->ring->size);
-	return intel_ring_wrap(req->ring, offset);
+	u32 offset = addr - rq->ring->vaddr;
+	GEM_BUG_ON(offset > rq->ring->size);
+	return intel_ring_wrap(rq->ring, offset);
 }
 
 static inline void
@@ -791,7 +822,7 @@ intel_ring_set_tail(struct intel_ring *ring, unsigned int tail)
 {
 	/* Whilst writes to the tail are strictly order, there is no
 	 * serialisation between readers and the writers. The tail may be
-	 * read by i915_gem_request_retire() just as it is being updated
+	 * read by i915_request_retire() just as it is being updated
 	 * by execlists, as although the breadcrumb is complete, the context
 	 * switch hasn't been seen.
 	 */
@@ -812,8 +843,8 @@ int intel_init_bsd_ring_buffer(struct intel_engine_cs *engine);
 int intel_init_blt_ring_buffer(struct intel_engine_cs *engine);
 int intel_init_vebox_ring_buffer(struct intel_engine_cs *engine);
 
-u64 intel_engine_get_active_head(struct intel_engine_cs *engine);
-u64 intel_engine_get_last_batch_head(struct intel_engine_cs *engine);
+u64 intel_engine_get_active_head(const struct intel_engine_cs *engine);
+u64 intel_engine_get_last_batch_head(const struct intel_engine_cs *engine);
 
 static inline u32 intel_engine_get_seqno(struct intel_engine_cs *engine)
 {
@@ -833,7 +864,7 @@ static inline u32 intel_engine_last_submit(struct intel_engine_cs *engine)
 }
 
 int init_workarounds_ring(struct intel_engine_cs *engine);
-int intel_ring_workarounds_emit(struct drm_i915_gem_request *req);
+int intel_ring_workarounds_emit(struct i915_request *rq);
 
 void intel_engine_get_instdone(struct intel_engine_cs *engine,
 			       struct intel_instdone *instdone);
@@ -861,7 +892,7 @@ static inline u32 intel_hws_preempt_done_address(struct intel_engine_cs *engine)
 int intel_engine_init_breadcrumbs(struct intel_engine_cs *engine);
 
 static inline void intel_wait_init(struct intel_wait *wait,
-				   struct drm_i915_gem_request *rq)
+				   struct i915_request *rq)
 {
 	wait->tsk = current;
 	wait->request = rq;
@@ -887,9 +918,9 @@ intel_wait_update_seqno(struct intel_wait *wait, u32 seqno)
 
 static inline bool
 intel_wait_update_request(struct intel_wait *wait,
-			  const struct drm_i915_gem_request *rq)
+			  const struct i915_request *rq)
 {
-	return intel_wait_update_seqno(wait, i915_gem_request_global_seqno(rq));
+	return intel_wait_update_seqno(wait, i915_request_global_seqno(rq));
 }
 
 static inline bool
@@ -900,9 +931,9 @@ intel_wait_check_seqno(const struct intel_wait *wait, u32 seqno)
 
 static inline bool
 intel_wait_check_request(const struct intel_wait *wait,
-			 const struct drm_i915_gem_request *rq)
+			 const struct i915_request *rq)
 {
-	return intel_wait_check_seqno(wait, i915_gem_request_global_seqno(rq));
+	return intel_wait_check_seqno(wait, i915_request_global_seqno(rq));
 }
 
 static inline bool intel_wait_complete(const struct intel_wait *wait)
@@ -914,9 +945,8 @@ bool intel_engine_add_wait(struct intel_engine_cs *engine,
 			   struct intel_wait *wait);
 void intel_engine_remove_wait(struct intel_engine_cs *engine,
 			      struct intel_wait *wait);
-void intel_engine_enable_signaling(struct drm_i915_gem_request *request,
-				   bool wakeup);
-void intel_engine_cancel_signaling(struct drm_i915_gem_request *request);
+bool intel_engine_enable_signaling(struct i915_request *request, bool wakeup);
+void intel_engine_cancel_signaling(struct i915_request *request);
 
 static inline bool intel_engine_has_waiter(const struct intel_engine_cs *engine)
 {
@@ -935,7 +965,6 @@ void intel_engine_disarm_breadcrumbs(struct intel_engine_cs *engine);
 
 void intel_engine_reset_breadcrumbs(struct intel_engine_cs *engine);
 void intel_engine_fini_breadcrumbs(struct intel_engine_cs *engine);
-bool intel_breadcrumbs_busy(struct intel_engine_cs *engine);
 
 static inline u32 *gen8_emit_pipe_control(u32 *batch, u32 flags, u32 offset)
 {
@@ -1066,5 +1095,8 @@ int intel_enable_engine_stats(struct intel_engine_cs *engine);
 void intel_disable_engine_stats(struct intel_engine_cs *engine);
 
 ktime_t intel_engine_get_busy_time(struct intel_engine_cs *engine);
+
+u32 intel_class_context_size(struct drm_i915_private *dev_priv, u8 class);
+
 
 #endif /* _INTEL_RINGBUFFER_H_ */
