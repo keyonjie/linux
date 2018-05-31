@@ -683,20 +683,123 @@ static const struct snd_soc_component_driver sof_dai_component = {
 #define SOF_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE | \
 	SNDRV_PCM_FMTBIT_S32_LE | SNDRV_PCM_FMTBIT_FLOAT)
 
+/* BE CPU  Dais */
+static struct snd_soc_dai_driver sof_platform_dai[] = {
+{
+	.name = "SSP0 Pin",
+	.ops = &sof_dai_ops,
+	.playback = {
+		.stream_name = "ssp0 Tx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+	.capture = {
+		.stream_name = "ssp0 Rx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+},
+{
+	.name = "SSP1 Pin",
+	.ops = &sof_dai_ops,
+	.playback = {
+		.stream_name = "ssp1 Tx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+	.capture = {
+		.stream_name = "ssp1 Rx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+},
+{
+	.name = "SSP2 Pin",
+	.ops = &sof_dai_ops,
+	.playback = {
+		.stream_name = "ssp2 Tx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+	.capture = {
+		.stream_name = "ssp2 Rx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+},
+{
+	.name = "SSP3 Pin",
+	.ops = &sof_dai_ops,
+	.playback = {
+		.stream_name = "ssp3 Tx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+	.capture = {
+		.stream_name = "ssp3 Rx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+},
+{
+	.name = "SSP4 Pin",
+	.ops = &sof_dai_ops,
+	.playback = {
+		.stream_name = "ssp4 Tx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+	.capture = {
+		.stream_name = "ssp4 Rx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+},
+{
+	.name = "SSP5 Pin",
+	.ops = &sof_dai_ops,
+	.playback = {
+		.stream_name = "ssp5 Tx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+	.capture = {
+		.stream_name = "ssp5 Rx",
+		.channels_min = 1,
+		.channels_max = 16,
+		.rates = SNDRV_PCM_RATE_8000_192000,
+		.formats = SOF_FORMATS,
+	},
+},
+};
+
 void snd_sof_new_dai_drv(struct snd_sof_dev *sdev)
 {
-	struct snd_soc_dai_driver *dd = &sdev->dai_drv;
-	//struct snd_sof_pdata *plat_data = sdev->pdata;
-
 	sdev->cmpnt_drv = &sof_dai_component;
-	dd->playback.channels_min = 1;
-	dd->playback.channels_max = 16;
-	dd->playback.rates = SNDRV_PCM_RATE_8000_192000;
-	dd->playback.formats = SOF_FORMATS;
-	dd->capture.channels_min = 1;
-	dd->capture.channels_max = 16;
-	dd->capture.rates = SNDRV_PCM_RATE_8000_192000;
-	dd->capture.formats = SOF_FORMATS;
-	dd->ops = &sof_dai_ops;
-	sdev->num_dai = 1;
+	sdev->dai_drv = sof_platform_dai;
+	sdev->dai_drv = kmemdup(sof_platform_dai, sizeof(sof_platform_dai),
+				GFP_KERNEL);
+	sdev->num_dai = ARRAY_SIZE(sof_platform_dai);
 }

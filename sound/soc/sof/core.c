@@ -397,7 +397,7 @@ static int sof_probe(struct platform_device *pdev)
 	}
 
 	ret = snd_soc_register_component(&pdev->dev,  sdev->cmpnt_drv,
-					 &sdev->dai_drv, sdev->num_dai);
+					 sdev->dai_drv, sdev->num_dai);
 	if (ret < 0) {
 		dev_err(sdev->dev,
 			"error: failed to register DSP DAI driver %d\n", ret);

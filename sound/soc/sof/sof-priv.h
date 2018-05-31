@@ -238,7 +238,7 @@ struct snd_sof_dev {
 	/* ASoC components */
 	struct snd_soc_platform_driver plat_drv;
 	const struct snd_soc_component_driver *cmpnt_drv;
-	struct snd_soc_dai_driver dai_drv;
+	struct snd_soc_dai_driver *dai_drv;
 	int num_dai;
 
 	/* DSP firmware boot */
