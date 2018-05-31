@@ -976,9 +976,9 @@ struct snd_soc_platform_driver {
 	/* platform stream compress ops */
 	const struct snd_compr_ops *compr_ops;
 
-	/* this platform uses topology and ignore machine driver FEs */
-	const char *ignore_machine;
 	const char *topology_name_prefix;
+	int (*dai_link_override)(struct snd_soc_card *card,
+				 struct snd_soc_platform *platform);
 	int (*be_hw_params_fixup)(struct snd_soc_pcm_runtime *rtd,
 				  struct snd_pcm_hw_params *params);
 	bool use_dai_pcm_id;	/* use the DAI link PCM ID as PCM device number */

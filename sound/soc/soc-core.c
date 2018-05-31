@@ -2147,79 +2147,23 @@ int snd_soc_set_dmi_name(struct snd_soc_card *card, const char *flavour)
 EXPORT_SYMBOL_GPL(snd_soc_set_dmi_name);
 #endif /* CONFIG_DMI */
 
-static void soc_check_tplg_fes(struct snd_soc_card *card)
-{
-	struct snd_soc_platform *platform;
-	struct snd_soc_dai_link *dai_link;
-	int i;
-
-	list_for_each_entry(platform, &platform_list, list) {
-
-		/* does this platform override FEs ? */
-		if (!platform->driver->ignore_machine)
-			continue;
-
-		/* for this machine ? */
-		if (strcmp(platform->driver->ignore_machine,
-			   card->dev->driver->name))
-			continue;
-
-		/* machine matches, so override the rtd data */
-		for (i = 0; i < card->num_links; i++) {
-
-			dai_link = &card->dai_link[i];
-
-			/* ignore this FE */
-			if (dai_link->dynamic) {
-				dai_link->ignore = true;
-				continue;
-			}
-
-			dev_info(card->dev, "info: override FE DAI link %s\n",
-				 card->dai_link[i].name);
-
-			/* override platform */
-			dai_link->platform_name = platform->component.name;
-			dai_link->cpu_dai_name = platform->component.name;
-
-			/* convert non BE into BE */
-			dai_link->no_pcm = 1;
-			dai_link->dpcm_playback = 1;
-			dai_link->dpcm_capture = 1;
-
-			/* override any BE fixups */
-			dai_link->be_hw_params_fixup =
-				platform->driver->be_hw_params_fixup;
-
-			/* most BE links don't set stream name, so set it to
-			 * dai link name if it's NULL to help bind widgets.
-			 */
-			if (!dai_link->stream_name)
-				dai_link->stream_name = dai_link->name;
-		}
-
-		/* Inform userspace we are using alternate topology */
-		if (platform->driver->topology_name_prefix) {
-			snprintf(card->topology_shortname, 32, "%s-%s",
-				 platform->driver->topology_name_prefix,
-				 card->name);
-			card->name = card->topology_shortname;
-		}
-	}
-}
-
 static int snd_soc_instantiate_card(struct snd_soc_card *card)
 {
 	struct snd_soc_codec *codec;
 	struct snd_soc_pcm_runtime *rtd;
 	struct snd_soc_dai_link *dai_link;
+	struct snd_soc_platform *platform;
 	int ret, i, order;
 
 	mutex_lock(&client_mutex);
 	mutex_lock_nested(&card->mutex, SND_SOC_CARD_CLASS_INIT);
 
-	/* check whether any platform is ignore machine FE and using topology */
-	soc_check_tplg_fes(card);
+	/* check whether any platform is overriding BEs and using topology */
+	list_for_each_entry(platform, &platform_list, list) {
+		/* does this platform override dai_links ? */
+		if (platform->driver->dai_link_override)
+			platform->driver->dai_link_override(card, platform);
+	}
 
 	/* bind DAIs */
 	for (i = 0; i < card->num_links; i++) {

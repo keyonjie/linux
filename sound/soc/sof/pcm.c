@@ -481,6 +481,59 @@ static void sof_pcm_free(struct snd_pcm *pcm)
 	snd_sof_free_topology(sdev);
 }
 
+static int sof_dai_link_override(struct snd_soc_card *card,
+				 struct snd_soc_platform *platform)
+{
+	struct snd_soc_dai_link *dai_link;
+	char *cpu_dai_name;
+	int i;
+
+	/* machine matches, so override the rtd data */
+	for (i = 0; i < card->num_links; i++) {
+		dai_link = &card->dai_link[i];
+
+		/* ignore all FEs */
+		if (!dai_link->no_pcm) {
+			dai_link->ignore = true;
+			continue;
+		}
+
+		dev_info(card->dev, "info: override BE DAI link %s\n",
+			 card->dai_link[i].name);
+
+		/* override platform */
+		dai_link->platform_name = platform->component.name;
+		/* override cpu_dai_name to be "SSPx Pin" */
+		cpu_dai_name = kmalloc(32, GFP_KERNEL);
+		sprintf(cpu_dai_name, "%.3s%c%.4s",
+			"SSP", dai_link->name[3], " Pin");
+		dai_link->cpu_dai_name = cpu_dai_name;
+
+		dev_info(card->dev, "dai_link->cpu_dai_name:%s\n",
+			 dai_link->cpu_dai_name);
+
+		/* override any BE fixups */
+		dai_link->be_hw_params_fixup =
+			platform->driver->be_hw_params_fixup;
+
+		/* most BE links don't set stream name, so set it to
+		 * dai link name if it's NULL to help bind widgets.
+		 */
+		if (!dai_link->stream_name)
+			dai_link->stream_name = dai_link->name;
+	}
+
+	/* Inform userspace we are using alternate topology */
+	if (platform->driver->topology_name_prefix) {
+		snprintf(card->topology_shortname, 32, "%s-%s",
+			 platform->driver->topology_name_prefix,
+			 card->name);
+		card->name = card->topology_shortname;
+	}
+
+	return 0;
+}
+
 static int sof_pcm_dai_link_fixup(struct snd_soc_pcm_runtime *rtd,
 				  struct snd_pcm_hw_params *params)
 {
@@ -613,8 +666,8 @@ void snd_sof_new_platform_drv(struct snd_sof_dev *sdev)
 	pd->compr_ops = &sof_compressed_ops;
 	pd->pcm_new = sof_pcm_new;
 	pd->pcm_free = sof_pcm_free;
-	pd->ignore_machine = plat_data->machine->drv_name;
 	pd->be_hw_params_fixup = sof_pcm_dai_link_fixup;
+	pd->dai_link_override = sof_dai_link_override;
 	pd->be_pcm_base = SOF_BE_PCM_BASE;
 	pd->use_dai_pcm_id = true;
 	pd->topology_name_prefix = "sof";
