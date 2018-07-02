@@ -157,6 +157,8 @@ struct skl_dsp_ops {
 	void (*cleanup)(struct device *dev, struct skl_sst *ctx);
 };
 
+extern struct skl_machine_pdata skl_dmic_data;
+
 int skl_platform_unregister(struct device *dev);
 int skl_platform_register(struct device *dev);
 
