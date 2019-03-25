@@ -93,6 +93,28 @@ struct snd_soc_dai_link skl_hda_be_dai_links[HDA_DSP_MAX_BE_DAI_LINKS] = {
 		.init = NULL,
 		.no_pcm = 1,
 	},
+	{
+		.name = "dmic01",
+		.id = 6,
+		.cpu_dai_name = "DMIC01 Pin",
+		.codec_name = "dmic-codec",
+		.codec_dai_name = "dmic-hifi",
+		.platform_name = "0000:00:1f.3",
+		.dpcm_capture = 1,
+		.init = NULL,
+		.no_pcm = 1,
+	},
+	{
+		.name = "dmic02",
+		.id = 7,
+		.cpu_dai_name = "DMIC16k Pin",
+		.codec_name = "dmic-codec",
+		.codec_dai_name = "dmic-hifi",
+		.platform_name = "0000:00:1f.3",
+		.dpcm_capture = 1,
+		.init = NULL,
+		.no_pcm = 1,
+	},
 };
 
 int skl_hda_hdmi_jack_init(struct snd_soc_card *card)
