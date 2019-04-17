@@ -435,13 +435,19 @@ irqreturn_t hda_dsp_stream_interrupt(int irq, void *context)
 	struct hdac_bus *bus = context;
 	u32 status;
 
+	dev_vdbg(bus->dev, "stream irq, INTSTS status: 0x%x\n",
+		 snd_hdac_chip_readl(bus, INTSTS));
+
 	if (!pm_runtime_active(bus->dev))
 		return IRQ_NONE;
 
 	spin_lock(&bus->reg_lock);
 
 	status = snd_hdac_chip_readl(bus, INTSTS);
-	if (status == 0 || status == 0xffffffff) {
+
+	/* Not stream interrupt or register inaccessible, ignore it.*/
+	if (!(status & (AZX_INT_CTRL_EN | AZX_INT_ALL_STREAM)) ||
+	    status == 0xffffffff) {
 		spin_unlock(&bus->reg_lock);
 		return IRQ_NONE;
 	}
