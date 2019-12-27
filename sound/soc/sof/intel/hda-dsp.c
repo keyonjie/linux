@@ -20,6 +20,7 @@
 #include "../ops.h"
 #include "hda.h"
 #include "hda-ipc.h"
+#include "../sof-audio.h"
 
 /*
  * DSP Core control.
