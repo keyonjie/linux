@@ -2301,7 +2301,7 @@ static int snd_pcm_hw_rule_buffer_bytes_max(struct snd_pcm_hw_params *params,
 	struct snd_interval t;
 	struct snd_pcm_substream *substream = rule->private;
 	t.min = 0;
-	t.max = substream->buffer_bytes_max;
+	t.max = substream->dma_max;
 	t.openmin = 0;
 	t.openmax = 0;
 	t.integer = 1;
