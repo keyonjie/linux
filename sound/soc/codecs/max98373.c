@@ -204,6 +204,9 @@ static int max98373_set_clock(struct snd_soc_component *component,
 	return 0;
 }
 
+#define MAX_98373_DEV0_NAME	"i2c-MX98373:00"
+#define MAX_98373_DEV1_NAME	"i2c-MX98373:01"
+
 static int max98373_dai_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params,
 	struct snd_soc_dai *dai)
@@ -212,6 +215,32 @@ static int max98373_dai_hw_params(struct snd_pcm_substream *substream,
 	struct max98373_priv *max98373 = snd_soc_component_get_drvdata(component);
 	unsigned int sampling_rate = 0;
 	unsigned int chan_sz = 0;
+
+	if (!strcmp(dai->component->name, MAX_98373_DEV0_NAME)) {
+		/* voltage(1), current(0) slot configuration */
+		regmap_write(max98373->regmap, MAX98373_R2022_PCM_TX_SRC_1,
+			     (0x0 << MAX98373_PCM_TX_CH_SRC_A_I_SHIFT | 0x1)
+			     & 0xFF);
+		regmap_update_bits(max98373->regmap,
+				   MAX98373_R2020_PCM_TX_HIZ_EN_1,
+				   0x3, 0);
+
+		/* speaker feedback slot configuration */
+		regmap_write(max98373->regmap,	MAX98373_R2023_PCM_TX_SRC_2, 0x10);
+	} else if (!strcmp(dai->component->name, MAX_98373_DEV1_NAME)) {
+		/* voltage(3), current(2) slot configuration */
+		regmap_write(max98373->regmap,	MAX98373_R2022_PCM_TX_SRC_1,
+			     (0x2 << MAX98373_PCM_TX_CH_SRC_A_I_SHIFT |	0x3)
+			     & 0xFF);
+		regmap_update_bits(max98373->regmap,
+				   MAX98373_R2020_PCM_TX_HIZ_EN_1,
+				   0xc, 0);
+
+		/* speaker feedback slot configuration */
+		regmap_write(max98373->regmap,
+			     MAX98373_R2023_PCM_TX_SRC_2,
+			     0x20);
+	}
 
 	/* pcm mode configuration */
 	switch (snd_pcm_format_width(params_format(params))) {
