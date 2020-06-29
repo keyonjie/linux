@@ -594,6 +594,8 @@ static int hda_suspend(struct snd_sof_dev *sdev, bool runtime_suspend)
 #endif
 	int ret;
 
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
+
 	hda_sdw_int_enable(sdev, false);
 
 	/* disable IPC interrupts */
@@ -603,6 +605,7 @@ static int hda_suspend(struct snd_sof_dev *sdev, bool runtime_suspend)
 	if (runtime_suspend)
 		hda_codec_jack_wake_enable(sdev);
 
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 	/* power down all hda link */
 	snd_hdac_ext_bus_link_power_down_all(bus);
 #endif
@@ -637,6 +640,7 @@ static int hda_suspend(struct snd_sof_dev *sdev, bool runtime_suspend)
 	/* display codec can powered off after link reset */
 	hda_codec_i915_display_power(sdev, false);
 
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 	return 0;
 }
 
@@ -692,16 +696,22 @@ int hda_dsp_resume(struct snd_sof_dev *sdev)
 {
 	struct sof_intel_hda_dev *hda = sdev->pdata->hw_pdata;
 	struct pci_dev *pci = to_pci_dev(sdev->dev);
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_HDA)
+	struct hdac_bus *bus = sof_to_bus(sdev);
+	struct hdac_ext_link *hlink;
+#endif
 	const struct sof_dsp_power_state target_state = {
 		.state = SOF_DSP_PM_D0,
 		.substate = SOF_HDA_DSP_PM_D0I0,
 	};
 	int ret;
 
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 	/* resume from D0I3 */
 	if (sdev->dsp_power_state.state == SOF_DSP_PM_D0) {
 		hda_codec_i915_display_power(sdev, true);
 
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 		/* Set DSP power state */
 		ret = snd_sof_dsp_set_power_state(sdev, &target_state);
 		if (ret < 0) {
@@ -719,14 +729,29 @@ int hda_dsp_resume(struct snd_sof_dev *sdev)
 		/* restore and disable the system wakeup */
 		pci_restore_state(pci);
 		disable_irq_wake(pci->irq);
+
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_HDA)
+		/* turn on the links that were on before suspend */
+		list_for_each_entry(hlink, &bus->hlink_list, list) {
+			if (hlink->ref_count)
+				snd_hdac_ext_bus_link_power_up(hlink);
+		}
+
+		/* set up CORB/RIRB buffers if was on before suspend */
+		if (bus->cmd_dma_state)
+			snd_hdac_bus_init_cmd_io(bus);
+#endif
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 		return 0;
 	}
 
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 	/* init hda controller. DSP cores will be powered up during fw boot */
 	ret = hda_resume(sdev, false);
 	if (ret < 0)
 		return ret;
 
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 	return snd_sof_dsp_set_power_state(sdev, &target_state);
 }
 
@@ -785,10 +810,12 @@ int hda_dsp_suspend(struct snd_sof_dev *sdev, u32 target_state)
 	};
 	int ret;
 
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 	/* cancel any attempt for DSP D0I3 */
 	cancel_delayed_work_sync(&hda->d0i3_work);
 
 	if (target_state == SOF_DSP_PM_D0) {
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 		/* we can't keep a wakeref to display driver at suspend */
 		hda_codec_i915_display_power(sdev, false);
 
@@ -808,12 +835,23 @@ int hda_dsp_suspend(struct snd_sof_dev *sdev, u32 target_state)
 						HDA_VS_INTEL_EM2_L1SEN,
 						HDA_VS_INTEL_EM2_L1SEN);
 
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_HDA)
+		/* power down all hda link */
+		snd_hdac_ext_bus_link_power_down_all(bus);
+
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
+		/* stop the CORB/RIRB DMA if it is On */
+		if (bus->cmd_dma_state)
+			snd_hdac_bus_stop_cmd_io(bus);
+#endif
 		/* enable the system waking up via IPC IRQ */
 		enable_irq_wake(pci->irq);
 		pci_save_state(pci);
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 		return 0;
 	}
 
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 	/* stop hda controller and power dsp off */
 	ret = hda_suspend(sdev, false);
 	if (ret < 0) {
@@ -821,6 +859,7 @@ int hda_dsp_suspend(struct snd_sof_dev *sdev, u32 target_state)
 		return ret;
 	}
 
+printk(KERN_DEBUG "Keyon: %s, %d\n", __func__, __LINE__);
 	return snd_sof_dsp_set_power_state(sdev, &target_dsp_state);
 }
 
