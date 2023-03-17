@@ -537,6 +537,21 @@ int intel_guc_slpc_get_min_freq(struct intel_guc_slpc *slpc, u32 *val)
 	return ret;
 }
 
+int intel_guc_slpc_set_strategy(struct intel_guc_slpc *slpc, u32 val)
+{
+	struct drm_i915_private *i915 = slpc_to_i915(slpc);
+	intel_wakeref_t wakeref;
+	int ret = 0;
+
+	with_intel_runtime_pm(&i915->runtime_pm, wakeref)
+		ret = slpc_set_param(slpc,
+				     SLPC_PARAM_STRATEGIES,
+				     val);
+	drm_err(&i915->drm, "Set SLPC strategy returned: %d", ret);
+
+	return ret;
+}
+
 int intel_guc_slpc_set_media_ratio_mode(struct intel_guc_slpc *slpc, u32 val)
 {
 	struct drm_i915_private *i915 = slpc_to_i915(slpc);
@@ -710,6 +725,9 @@ int intel_guc_slpc_enable(struct intel_guc_slpc *slpc)
 
 	/* Set cached media freq ratio mode */
 	intel_guc_slpc_set_media_ratio_mode(slpc, slpc->media_ratio_mode);
+
+	/* Enable Compute strategy */
+	intel_guc_slpc_set_strategy(slpc, 0x1);
 
 	return 0;
 }

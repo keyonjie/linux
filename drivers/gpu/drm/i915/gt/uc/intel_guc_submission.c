@@ -2579,6 +2579,7 @@ MAKE_CONTEXT_POLICY_ADD(execution_quantum, EXECUTION_QUANTUM)
 MAKE_CONTEXT_POLICY_ADD(preemption_timeout, PREEMPTION_TIMEOUT)
 MAKE_CONTEXT_POLICY_ADD(priority, SCHEDULING_PRIORITY)
 MAKE_CONTEXT_POLICY_ADD(preempt_to_idle, PREEMPT_TO_IDLE_ON_QUANTUM_EXPIRY)
+MAKE_CONTEXT_POLICY_ADD(slpc_frequency, SLPM_GT_FREQUENCY)
 
 #undef MAKE_CONTEXT_POLICY_ADD
 
@@ -2591,13 +2592,17 @@ static int __guc_context_set_context_policies(struct intel_guc *guc,
 					0, loop);
 }
 
+#define SLPC_BACKGROUND	0x1 << 29
+#define SLPC_COMPUTE	0x1 << 28
 static int guc_context_policy_init_v70(struct intel_context *ce, bool loop)
 {
 	struct intel_engine_cs *engine = ce->engine;
 	struct intel_guc *guc = &engine->gt->uc.guc;
+	struct drm_i915_private *i915 = guc_to_gt(guc)->i915;
 	struct context_policy policy;
 	u32 execution_quantum;
 	u32 preemption_timeout;
+	u32 slpc_frequency = 0x0;
 	unsigned long flags;
 	int ret;
 
@@ -2608,12 +2613,15 @@ static int guc_context_policy_init_v70(struct intel_context *ce, bool loop)
 				  preemption_timeout));
 	execution_quantum = engine->props.timeslice_duration_ms * 1000;
 	preemption_timeout = engine->props.preempt_timeout_ms * 1000;
+	slpc_frequency |= SLPC_COMPUTE;
+	drm_err(&i915->drm, "Setting hint 0x%x for ctx: %d", slpc_frequency, ce->guc_id.id);
 
 	__guc_context_policy_start_klv(&policy, ce->guc_id.id);
 
 	__guc_context_policy_add_priority(&policy, ce->guc_state.prio);
 	__guc_context_policy_add_execution_quantum(&policy, execution_quantum);
 	__guc_context_policy_add_preemption_timeout(&policy, preemption_timeout);
+	__guc_context_policy_add_slpc_frequency(&policy, slpc_frequency);
 
 	if (engine->flags & I915_ENGINE_WANT_FORCED_PREEMPTION)
 		__guc_context_policy_add_preempt_to_idle(&policy, 1);
