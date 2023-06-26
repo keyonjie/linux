@@ -432,7 +432,7 @@ unsigned int arch_freq_get_on_cpu(int cpu)
 	 * Bail on invalid count and when the last update was too long ago,
 	 * which covers idle and NOHZ full CPUs.
 	 */
-	if (!mcnt || (jiffies - last) > MAX_SAMPLE_AGE)
+	if (!mcnt || (jiffies - last) > MAX_SAMPLE_AGE * cpu_khz)
 		goto fallback;
 
 	return div64_u64((cpu_khz * acnt), mcnt);
